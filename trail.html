@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Scene</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/GLTFLoader.js';
+import { OrbitControls } from 'https://unpkg.com/three@0.160.0/examples/jsm/controls/OrbitControls.js';
+import { RGBELoader } from 'https://unpkg.com/three@0.160.0/examples/jsm/loaders/RGBELoader.js';
+import { EffectComposer } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@0.160.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+
+// ================== SCENE ==================
+const scene = new THREE.Scene();
+
+// ================== CAMERA ==================
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 1, 5);
+
+// ================== RENDERER ==================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+document.body.appendChild(renderer.domElement);
+
+// ================== RESIZE ==================
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ================== HDRI ==================
+const rgbeLoader = new RGBELoader();
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+
+rgbeLoader.load('./hdri/HDR_artificial_planet.hdr', (texture) => {
+    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+    scene.environment = envMap;
+    scene.background = envMap;
+    texture.dispose();
+    pmremGenerator.dispose();
+});
+
+// ================== LOADER ==================
+const loader = new GLTFLoader();
+
+// -------- Space Station --------
+loader.load('./3d_model/SpaceShaded.glb', (gltf) => {
+    const model = gltf.scene;
+
+    model.traverse((child) => {
+        if (child.isMesh) {
+            const mat = child.material;
+            
+            mat.envMapIntensity = 2;
+            mat.metalness = 0.7;
+            mat.roughness = 0.25;
+            mat.needsUpdate = true;
+        }
+    });
+
+    model.scale.set(0.5, 0.5, 0.5);
+    scene.add(model);
+});
+
+const composer = new EffectComposer(renderer);
+
+const renderPass = new RenderPass(scene, camera);
+composer.addPass(renderPass);
+
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.5,   // strength (increase for more glow)
+    0.8,   // radius
+    0.05   // threshold (lower = more glow)
+);
+
+composer.addPass(bloomPass);
+
+
+// -------- Space Sphere (WITH EMISSION) --------
+loader.load('./3d_model/SpaceSphere.glb', (gltf) => {
+    const model2 = gltf.scene;
+
+    model2.scale.set(0.5, 0.5, 0.5);
+    model2.position.set(-2, 0, 0);
+
+    model2.traverse((child) => {
+        if (child.isMesh) {
+            const mat = child.material;
+
+            // ✅ Use original material color for emission
+            mat.emissive.copy(mat.color);
+
+            // 🔥 Boost brightness
+            mat.emissiveIntensity = 12;
+
+            // Important for strong emission
+            mat.toneMapped = false;
+
+            mat.needsUpdate = true;
+        }
+    });
+
+    scene.add(model2);
+});
+
+// ================== CONTROLS ==================
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+
+// ================== LOOP ==================
+function animate() {
+    requestAnimationFrame(animate);
+    controls.update();
+    composer.render();
+}
+animate();
+
+</script>
+
+</body>
+</html>
+
+
+<!--
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Scene</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+ 
+<body>
+ 
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+ 
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+ 
+// ---- your own modular files ----
+// import { addSpaceStation } from './objects/spaceStation.js';
+import { addSpaceEngine } from './objects/spaceEngine.js';
+import { addSpacePlatform } from './objects/spacePlatform.js';
+import { addSpaceFood } from './objects/spaceFood.js';
+import { addSpaceMainEngine } from './objects/spaceMainEngine.js';
+import { addSpaceEmision1 } from './objects/spaceEmision1.js';
+import { addSpaceEmision2 } from './objects/spaceEmision2.js';
+import { addSpaceSatelite } from './objects/spaceSatelite.js';
+import { addSpaceBoard } from './objects/spaceBoard.js';
+import { addSpaceText1 } from './objects/spaceText1.js';
+import { addSpaceRotatingText } from './objects/spaceRotatingText.js';
+import { addSpaceRockField } from './objects/spaceRockField.js';
+import { addSpaceManshirt } from './objects/spaceManshirt.js';
+import { addSpaceManpant } from './objects/spaceManpant.js';
+import { addSpaceManskin } from './objects/spaceManskin.js';
+import { addSpaceManhair } from './objects/spaceManhair.js';
+import { addSpaceMantshirt } from './objects/spaceMantshirt.js';
+import { addSpaceExtra } from './objects/spaceExtra.js';
+import { addSpaceMetalgrey } from './objects/spaceMetalgrey.js';
+
+// import { addBlackHole } from './objects/spaceBlackHole.js';
+// import { addSpaceExtra1 } from './objects/spaceExtra1.js';
+// import { addSpaceExtra2 } from './objects/spaceExtra2.js';
+ 
+// ui.buttons
+import { setupInteractiveButtons } from './ui/interactiveButtons.js';
+import { loadCameraMarkers } from './objects/cameraMarkers.js';
+import { CameraNavigator } from './ui/cameraNavigator.js';
+import { SidePanel } from './ui/sidePanel.js';
+ 
+// ================== SCENE ==================
+const scene = new THREE.Scene();
+ 
+// ================== CAMERA / CONTROLS CONFIG ==================
+const CAMERA_CONFIG = {
+    startPosition: { x: -10, y: 5, z: 10 },
+    target: { x: 0, y: 3.5, z: 0 },
+    minPolarAngle: 45,
+    maxPolarAngle: 100,
+    minDistance: 2,
+    maxDistance: 20,
+    minAzimuthAngle: -Infinity,
+    maxAzimuthAngle: Infinity,
+    enableDamping: true,
+    dampingFactor: 0.08,
+    rotateSpeed: 0.6,
+    zoomSpeed: 0.8,
+};
+ 
+// ================================================================
+// ================== TWEAK CAMERA DESTINATIONS HERE ==============
+// ================================================================
+// Each entry corresponds to a Blender Empty (already positioned/rotated
+// in the .glb). The offset fields below let you nudge position/rotation
+// from code without re-exporting from Blender every time.
+//
+// Once you're happy with a button's framing, it's best to bake the
+// offset into the Empty itself in Blender and reset these back to 0 —
+// keeps this file clean and the 3D file as the source of truth.
+const BUTTON_DESTINATIONS = {
+    profile: {
+        markerName: 'Empty001',
+        pageUrl: './pages/profile.html',
+        panelSide: 'right', // stays on the right, unchanged
+        offsetPosition: { x: -2.8, y: -1.4, z: -4.0 },     // nudge camera position
+        offsetRotationDeg: { x: -90, y: 40, z: 0 },  // nudge camera rotation (pitch, yaw, roll)
+    },
+    project: {
+        markerName: 'Empty002', // update once you add this empty in Blender
+        pageUrl: './pages/project.html',
+        panelSide: 'left', // ← this is what you asked for
+        offsetPosition: { x: -33, y: 2.2, z: 19.5 },
+        offsetRotationDeg: { x: -90, y: -20, z: 0 },
+    },
+    contact: {
+        markerName: 'Empty003', // update once you add this empty in Blender
+        pageUrl: './pages/contact.html',
+        panelSide: 'right', // stays on the right, unchanged
+        offsetPosition: { x: 15, y: 0, z: 38 },
+        offsetRotationDeg: { x: -95, y: -18, z: 0 },
+    },
+};
+// ================================================================
+ 
+
+
+// ================== CAMERA ==================
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(
+    CAMERA_CONFIG.startPosition.x,
+    CAMERA_CONFIG.startPosition.y,
+    CAMERA_CONFIG.startPosition.z
+);
+ 
+// ================== RENDERER ==================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+ 
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+ 
+document.body.appendChild(renderer.domElement);
+
+// ================== LIGHTS ==================
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(10, 15, 10);
+scene.add(dirLight);
+ 
+// ================== RESIZE ==================
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+});
+ 
+// ================== HDRI ==================
+const rgbeLoader = new RGBELoader();
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+ 
+// rgbeLoader.load('./hdri/skybox_basic.hdr', (texture) => {
+//     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+//     scene.environment = envMap;
+// scene.environmentIntensity = 0; // 🔥 very low
+// scene.background = envMap; // change
+//     texture.dispose();
+//     pmremGenerator.dispose();
+// });
+ 
+
+rgbeLoader.load('./hdri/outer-space-8k_2K_ae1d0eba-b64e-4c2a-ae9b-23b7b45f7026.hdr', (texture) => {
+    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+
+    // ✅ ONLY background (visual)
+    scene.background = envMap;
+
+    // ❌ REMOVE lighting influence
+    scene.environment = null;
+
+    // 🔥 control ONLY HDRI brightness
+    scene.backgroundIntensity = 2.8; // tweak this
+
+    texture.dispose();
+    pmremGenerator.dispose();
+});
+// ================== POST-PROCESSING ==================
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+ 
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.5,   // strength
+    0.8,   // radius
+    0.05   // threshold
+);
+composer.addPass(bloomPass);
+ 
+// ================== OBJECTS ==================
+addSpaceEngine(scene).catch((err) => console.error('spaceEngine did not load:', err));
+addSpacePlatform(scene).catch((err) => console.error('spacePlatform did not load:', err));
+addSpaceFood(scene).catch((err) => console.error('spaceFood did not load:', err));
+addSpaceMainEngine(scene).catch((err) => console.error('spaceMainEngine did not load:', err));
+addSpaceEmision1(scene).catch((err) => console.error('spaceEmision1 did not load:', err));
+addSpaceEmision2(scene).catch((err) => console.error('spaceEmision2 did not load:', err));
+addSpaceSatelite(scene).catch((err) => console.error('spaceSatelite did not load:', err));
+addSpaceBoard(scene).catch((err) => console.error('spaceBoard did not load:', err));
+addSpaceText1(scene).catch((err) => console.error('spaceText1 did not load:', err));
+addSpaceRotatingText(scene).catch((err) => console.error('spaceRotatingText did not load:', err));
+addSpaceManshirt(scene).catch((err) => console.error('addSpaceManshirt did not load:', err));
+addSpaceManpant(scene).catch((err) => console.error('addSpaceManpant did not load:', err));
+addSpaceManskin(scene).catch((err) => console.error('addSpaceManskin did not load:', err));
+addSpaceManhair(scene).catch((err) => console.error('addSpaceManhair did not load:', err));
+addSpaceMantshirt(scene).catch((err) => console.error('addSpaceMantshirt did not load:', err));
+addSpaceExtra(scene).catch((err) => console.error('addSpaceExtra did not load:', err));
+addSpaceMetalgrey(scene).catch((err) => console.error('addSpaceMetalgrey did not load:', err));
+// addBlackHole(scene).catch((err) => console.error('addBlackHole did not load:', err));
+// addSpaceExtra1(scene).catch((err) => console.error('addSpaceExtra1 did not load:', err));
+// addSpaceExtra2(scene).catch((err) => console.error('addSpaceExtra2 did not load:', err));
+ 
+
+
+// ================== CONTROLS ==================
+const controls = new OrbitControls(camera, renderer.domElement);
+ 
+controls.target.set(
+    CAMERA_CONFIG.target.x,
+    CAMERA_CONFIG.target.y,
+    CAMERA_CONFIG.target.z
+);
+ 
+controls.enablePan = false;
+controls.minPolarAngle = THREE.MathUtils.degToRad(CAMERA_CONFIG.minPolarAngle);
+controls.maxPolarAngle = THREE.MathUtils.degToRad(CAMERA_CONFIG.maxPolarAngle);
+controls.minAzimuthAngle = CAMERA_CONFIG.minAzimuthAngle;
+controls.maxAzimuthAngle = CAMERA_CONFIG.maxAzimuthAngle;
+controls.minDistance = CAMERA_CONFIG.minDistance;
+controls.maxDistance = CAMERA_CONFIG.maxDistance;
+controls.enableDamping = CAMERA_CONFIG.enableDamping;
+controls.dampingFactor = CAMERA_CONFIG.dampingFactor;
+controls.rotateSpeed = CAMERA_CONFIG.rotateSpeed;
+controls.zoomSpeed = CAMERA_CONFIG.zoomSpeed;
+ 
+controls.update();
+ 
+// ================== CAMERA NAVIGATION + SIDE PANEL ==================
+const nav = new CameraNavigator(camera, controls);
+const sidePanel = new SidePanel();
+ 
+let cameraMarkers = {};
+
+
+Promise.all([
+    loadCameraMarkers('./3d_model/SpaceEmptyPosition1.glb'),
+    loadCameraMarkers('./3d_model/SpaceEmptyPosition2.glb'),
+    loadCameraMarkers('./3d_model/SpaceEmptyPosition3.glb'),
+]).then(([markers1, markers2, markers3]) => {
+    cameraMarkers = { ...markers1, ...markers2, ...markers3 };
+    console.log('Camera markers ready:', Object.keys(cameraMarkers));
+});
+
+// Closing the panel flies the camera back to where it started
+sidePanel.onClose(() => {
+    nav.flyBack(1.4, () => nav.enableControls());
+});
+
+
+const rockField = addSpaceRockField(scene, {
+    count: 40,
+    ringCenter: { x: -100, y: 0, z: 0 },   // closer, so they pass near the station
+    ringRadius: 15,
+    ringSpread: 1.5,
+    travelDirection: { x: 1, y: 0, z: 0 }, // drifts left → right, past the station
+    travelDistance: 200,                     // shorter path so recycling feels tighter
+    speedMin: 0.3,
+    speedMax: 5.8,                          // slightly faster so it's noticeable while testing
+});
+
+console.log('Rock field children:', rockField.group.children.length);
+// ================== INTERACTIVE BUTTONS (single source of truth) ==================
+setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
+    console.log('Button clicked:', buttonId);
+ 
+    const destination = BUTTON_DESTINATIONS[buttonId];
+    if (!destination) {
+        console.warn(`No destination configured for button "${buttonId}"`);
+        return;
+    }
+ 
+    const marker = cameraMarkers[destination.markerName];
+    if (!marker) {
+        console.warn(
+            `Marker "${destination.markerName}" not found yet (still loading, or name mismatch).`
+        );
+        return;
+    }
+ 
+    const targetPos = new THREE.Vector3();
+    const targetQuat = new THREE.Quaternion();
+    marker.getWorldPosition(targetPos);
+    marker.getWorldQuaternion(targetQuat);
+ 
+    // ---- Apply tweak offset from BUTTON_DESTINATIONS above ----
+    targetPos.x += destination.offsetPosition.x;
+    targetPos.y += destination.offsetPosition.y;
+    targetPos.z += destination.offsetPosition.z;
+ 
+    const extraRotation = new THREE.Euler(
+        THREE.MathUtils.degToRad(destination.offsetRotationDeg.x),
+        THREE.MathUtils.degToRad(destination.offsetRotationDeg.y),
+        THREE.MathUtils.degToRad(destination.offsetRotationDeg.z)
+    );
+    targetQuat.multiply(new THREE.Quaternion().setFromEuler(extraRotation));
+ 
+    nav.flyToQuat(targetPos, targetQuat, 1.4, () => {
+    sidePanel.show(destination.pageUrl, destination.panelSide);
+    });
+});
+ 
+// ================== LOOP ==================
+// ================== LOOP ==================
+const clock = new THREE.Clock();
+let totalTime = 0; // must live OUTSIDE animate() to actually accumulate across frames
+
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta(); // seconds since last frame
+
+    totalTime += delta;
+    
+    if (nav.shouldUpdateControls()) {
+        controls.update();
+    }
+
+    rockField.update(delta);
+
+    composer.render();
+}
+animate();
+ 
+</script>
+ 
+</body>
+</html>

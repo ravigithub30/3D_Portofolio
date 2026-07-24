@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Black Hole — Real GR Ray Marching</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  canvas { display: block; }
+  #info {
+    position: fixed; left: 12px; bottom: 10px;
+    font: 12px/1.4 system-ui, sans-serif; color: #7aa; opacity: 0.6;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="info">drag to orbit · scroll to zoom · panel top-right to tweak the hole</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+    "lil-gui": "https://unpkg.com/lil-gui@0.19/dist/lil-gui.esm.js"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import GUI from 'lil-gui';
+
+import { BlackHoleLensPass } from './BlackHoleLens.js';
+import { createAccretionDisk } from './AccretionDisk.js';
+
+// ---------------------------------------------------------------------------
+// Renderer / Scene / Camera
+// ---------------------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(
+  50, window.innerWidth / window.innerHeight, 0.1, 5000
+);
+camera.position.set(0, 18, 60);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.06;
+controls.minDistance = 15;
+controls.maxDistance = 600;
+
+// ---------------------------------------------------------------------------
+// The accretion disk — a real mesh, added to the normal scene so it gets
+// proper mipmapping/anisotropic filtering/MSAA instead of raw shader sampling
+// ---------------------------------------------------------------------------
+const disk = createAccretionDisk({
+  position: { x: 0, y: 0, z: 0 },
+  innerRadius: 12,
+  outerRadius: 30,
+  tiltDeg: 72,
+  spinSpeed: 0.15,
+});
+scene.add(disk.mesh);
+
+// ---------------------------------------------------------------------------
+// The black hole — position, size, and the near-hole lensing zone are all
+// live-tweakable. It shares the disk's own texture so the wrapped/lensed
+// image right at the photon sphere matches the disk mesh seamlessly.
+// ---------------------------------------------------------------------------
+const lens = new BlackHoleLensPass(camera, {
+  position: { x: 0, y: 0, z: 0 },
+  radius: 4,
+  diskInner: 12,
+  diskOuter: 30,
+  diskTiltDeg: 72,
+  diskSpin: 0.15,
+  diskTexture: disk.texture,
+  steps: 180,
+});
+
+// ---------------------------------------------------------------------------
+// Composer
+// ---------------------------------------------------------------------------
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(lens);
+composer.addPass(new OutputPass());
+
+// ---------------------------------------------------------------------------
+// GUI — tweak position, size, and everything else live
+// ---------------------------------------------------------------------------
+const gui = new GUI({ title: 'Black Hole' });
+
+const posFolder = gui.addFolder('Position');
+posFolder.add(lens.params.position, 'x', -80, 80, 0.5);
+posFolder.add(lens.params.position, 'y', -80, 80, 0.5);
+posFolder.add(lens.params.position, 'z', -80, 80, 0.5);
+
+const sizeFolder = gui.addFolder('Size / Mass');
+sizeFolder.add(lens.params, 'radius', 0.5, 20, 0.1).name('Schwarzschild radius (rs)');
+
+const diskFolder = gui.addFolder('Accretion Disk');
+diskFolder.add(disk.params, 'spinSpeed', 0, 1, 0.01).name('spin speed').onChange(v => lens.params.diskSpin = v);
+diskFolder.add(disk.params, 'tiltDeg', 0, 90, 1).name('tilt (deg)').onChange(v => {
+  disk.mesh.rotation.x = Math.PI / 2 - THREE.MathUtils.degToRad(v);
+  lens.params.diskTiltDeg = v;
+});
+
+const lensFolder = gui.addFolder('Lensing Zone');
+lensFolder.add(lens.params, 'lensRadius', 10, 200, 1).name('ray-march extent');
+
+const qualityFolder = gui.addFolder('Ray March Quality');
+qualityFolder.add(lens.params, 'steps', 32, 400, 1).name('integration steps');
+qualityFolder.add(lens.params, 'aaSamples', 1, 4, 1).name('AA samples');
+
+// ---------------------------------------------------------------------------
+// Resize
+// ---------------------------------------------------------------------------
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+});
+
+// ---------------------------------------------------------------------------
+// Render loop
+// ---------------------------------------------------------------------------
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+
+  disk.update(dt, camera);
+  lens.update(dt);
+  controls.update();
+  composer.render();
+}
+animate();
+</script>
+</body>
+</html>

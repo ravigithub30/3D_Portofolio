@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Toon-Shaded Sphere — Multi-Light</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  canvas { display: block; }
+  #info {
+    position: fixed; left: 12px; bottom: 10px;
+    font: 12px/1.4 system-ui, sans-serif; color: #fff8; opacity: 0.8;
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="info">drag to orbit · scroll to zoom</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ================== CONFIG — every tweakable value lives here ==================
+const CONFIG = {
+  levels: 4,               // number of toon shading bands (higher = smoother, lower = more cartoonish)
+  baseColor: '#e8dbe6',    // the sphere's own albedo, before any light hits it
+  ambient: '#2a1f33',      // faint fill light so the unlit side isn't pure black
+  emissiveColor: '#000000',  // the sphere's own glow, independent of external lights (set a color to make it self-lit)
+  emissiveIntensity: 0.0,
+  specularSharpness: 60.0,  // higher = smaller, crisper toon highlight
+  lights: [
+    { color: '#ff2d55', position: [-3.2, 1.0, 3.0], intensity: 3.2, orbitSpeed: 0.35 },
+    { color: '#2ee07f', position: [-4.2, 2.2, -1.4], intensity: 2.6, orbitSpeed: -0.22 },
+    { color: '#3d6bff', position: [3.6, 3.0, 2.2], intensity: 2.6, orbitSpeed: 0.28 },
+  ],
+  backgroundTop: '#efc9d8',
+  backgroundBottom: '#f6e6c6',
+};
+
+// ---------------------------------------------------------------------------
+// Renderer / Scene / Camera
+// ---------------------------------------------------------------------------
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 1.2, 8);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 4;
+controls.maxDistance = 20;
+
+// ---------------------------------------------------------------------------
+// Pastel gradient background (canvas-based, matches the soft lavender/peach
+// backdrop in the reference image)
+// ---------------------------------------------------------------------------
+function makeBackgroundTexture(topColor, bottomColor) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 256;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, topColor);
+  grad.addColorStop(1, bottomColor);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 4, 256);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+scene.background = makeBackgroundTexture(CONFIG.backgroundTop, CONFIG.backgroundBottom);
+
+// ---------------------------------------------------------------------------
+// Toon shader — banded diffuse per light, banded specular highlight, and an
+// optional emissive term with a soft fresnel-driven rim.
+// ---------------------------------------------------------------------------
+const vertexShader = /* glsl */ `
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+  void main() {
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWorldPos = wp.xyz;
+    vNormal = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * viewMatrix * wp;
+  }
+`;
+
+const fragmentShader = /* glsl */ `
+  precision highp float;
+
+  uniform vec3 lightPos[3];
+  uniform vec3 lightColor[3];
+  uniform float lightIntensity[3];
+  uniform float levels;
+  uniform vec3 baseColor;
+  uniform vec3 ambientColor;
+  uniform vec3 emissiveColor;
+  uniform float emissiveIntensity;
+  uniform float specularSharpness;
+
+  varying vec3 vWorldPos;
+  varying vec3 vNormal;
+
+  void main() {
+    vec3 N = normalize(vNormal);
+    vec3 V = normalize(cameraPosition - vWorldPos);
+
+    vec3 color = ambientColor * baseColor;
+
+    for (int i = 0; i < 3; i++) {
+      vec3 toLight = lightPos[i] - vWorldPos;
+      float dist = length(toLight);
+      vec3 L = toLight / max(dist, 1e-4);
+
+      float ndotl = max(dot(N, L), 0.0);
+      float band = ceil(ndotl * levels) / levels;
+      float atten = lightIntensity[i] / (1.0 + 0.015 * dist * dist);
+
+      color += band * lightColor[i] * atten * baseColor;
+
+      vec3 R = reflect(-L, N);
+      float spec = pow(max(dot(R, V), 0.0), specularSharpness);
+      float specBand = step(0.5, spec);
+      color += specBand * lightColor[i] * atten * 0.55;
+    }
+
+    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.5);
+    color += emissiveColor * emissiveIntensity * (0.5 + 0.5 * fresnel);
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
+
+const lightPosUniform = CONFIG.lights.map(l => new THREE.Vector3(...l.position));
+const lightColorUniform = CONFIG.lights.map(l => new THREE.Color(l.color));
+const lightIntensityUniform = CONFIG.lights.map(l => l.intensity);
+
+const sphereMaterial = new THREE.ShaderMaterial({
+  uniforms: {
+    lightPos: { value: lightPosUniform },
+    lightColor: { value: lightColorUniform },
+    lightIntensity: { value: lightIntensityUniform },
+    levels: { value: CONFIG.levels },
+    baseColor: { value: new THREE.Color(CONFIG.baseColor) },
+    ambientColor: { value: new THREE.Color(CONFIG.ambient) },
+    emissiveColor: { value: new THREE.Color(CONFIG.emissiveColor) },
+    emissiveIntensity: { value: CONFIG.emissiveIntensity },
+    specularSharpness: { value: CONFIG.specularSharpness },
+  },
+  vertexShader,
+  fragmentShader,
+});
+
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(2, 96, 96), sphereMaterial);
+scene.add(sphere);
+
+// ---------------------------------------------------------------------------
+// Visible light markers — small glowing spheres at each light's position, so
+// you can see where the color is actually coming from (like the colored
+// dots in the reference image).
+// ---------------------------------------------------------------------------
+const lightMarkers = CONFIG.lights.map(l => {
+  const geo = new THREE.SphereGeometry(0.12, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({ color: l.color });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(...l.position);
+  scene.add(mesh);
+  return mesh;
+});
+
+// ---------------------------------------------------------------------------
+// Ground plane with a soft, colored shadow blob (canvas-based radial
+// gradient, blended), echoing the tinted shadow under the sphere in the
+// reference image — not a real shadow map, just a stylized decal.
+// ---------------------------------------------------------------------------
+function makeShadowTexture() {
+  const size = 512;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  grad.addColorStop(0, 'rgba(60,20,40,0.35)');
+  grad.addColorStop(0.6, 'rgba(80,40,20,0.15)');
+  grad.addColorStop(1, 'rgba(80,40,20,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+const shadowMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(6, 4),
+  new THREE.MeshBasicMaterial({
+    map: makeShadowTexture(),
+    transparent: true,
+    depthWrite: false,
+  })
+);
+shadowMesh.rotation.x = -Math.PI / 2;
+shadowMesh.position.set(0.3, -2.05, 0.4);
+scene.add(shadowMesh);
+
+// ---------------------------------------------------------------------------
+// Resize
+// ---------------------------------------------------------------------------
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---------------------------------------------------------------------------
+// Render loop — lights slowly orbit so the banding sweeps across the sphere
+// ---------------------------------------------------------------------------
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  CONFIG.lights.forEach((l, i) => {
+    const [x, y, z] = l.position;
+    const radius = Math.hypot(x, z);
+    const baseAngle = Math.atan2(z, x);
+    const angle = baseAngle + t * l.orbitSpeed;
+    const newX = Math.cos(angle) * radius;
+    const newZ = Math.sin(angle) * radius;
+    lightPosUniform[i].set(newX, y, newZ);
+    lightMarkers[i].position.set(newX, y, newZ);
+  });
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>3D Scene</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            height: 100%;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+
+<!--
+  CHANGED: reverted to THREE.WebGLRenderer + the classic EffectComposer
+  pipeline. The real gravitational-lensing black hole (BlackHoleLens.js) is
+  a raw-GLSL ShaderMaterial run through EffectComposer/Pass — that system is
+  not compatible with THREE.WebGPURenderer's node-based PostProcessing/TSL
+  pipeline that was here before. This also matches what all your other
+  objects/*.js modules were originally built against.
+
+  CHANGED (depth occlusion): added a depth pre-pass (depthRenderTarget) so
+  the black hole's lensing pass can tell when real scene geometry (the
+  station hull, etc.) is nearer to the camera than the hole itself, and
+  correctly hide the lensing effect behind solid objects instead of
+  rendering through them.
+-->
+<script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@latest/build/three.module.js",
+      "three/webgpu": "https://unpkg.com/three@latest/build/three.webgpu.js",
+      "three/tsl": "https://unpkg.com/three@latest/build/three.tsl.js",
+      "three/addons/": "https://unpkg.com/three@latest/examples/jsm/"
+    }
+  }
+</script>
+
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'https://unpkg.com/three@latest/examples/jsm/controls/OrbitControls.js';
+import { EffectComposer } from 'https://unpkg.com/three@latest/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'https://unpkg.com/three@latest/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'https://unpkg.com/three@latest/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'https://unpkg.com/three@latest/examples/jsm/postprocessing/OutputPass.js';
+import { RGBELoader } from 'https://unpkg.com/three@latest/examples/jsm/loaders/RGBELoader.js';
+import { Pass } from 'https://unpkg.com/three@latest/examples/jsm/postprocessing/Pass.js';
+// ---- your own modular files ----
+// import { addSpaceStation } from './objects/spaceStation.js';
+import { addSpaceEngine } from './objects/spaceEngine.js';
+import { addSpacePlatform } from './objects/spacePlatform.js';
+import { addSpaceFood } from './objects/spaceFood.js';
+import { addSpaceMainEngine } from './objects/spaceMainEngine.js';
+import { addSpaceEmision1 } from './objects/spaceEmision1.js';
+import { addSpaceEmision2 } from './objects/spaceEmision2.js';
+import { addSpaceSatelite } from './objects/spaceSatelite.js';
+import { addSpaceBoard } from './objects/spaceBoard.js';
+import { addSpaceText1 } from './objects/spaceText1.js';
+import { addSpaceRotatingText } from './objects/spaceRotatingText.js';
+import { addSpaceRockField } from './objects/spaceRockField.js';
+import { addSpaceManshirt } from './objects/spaceManshirt.js';
+import { addSpaceManpant } from './objects/spaceManpant.js';
+import { addSpaceManskin } from './objects/spaceManskin.js';
+import { addSpaceManhair } from './objects/spaceManhair.js';
+import { addSpaceMantshirt } from './objects/spaceMantshirt.js';
+import { addSpaceExtra } from './objects/spaceExtra.js';
+import { addSpaceMetalgrey } from './objects/spaceMetalgrey.js';
+
+
+// the real gravitational-lensing black hole
+import { addSpaceBlackHole } from './objects/spaceBlackHole.js';
+
+// import { addSpaceExtra1 } from './objects/spaceExtra1.js';
+// import { addSpaceExtra2 } from './objects/spaceExtra2.js';
+
+// ui.buttons
+import { setupInteractiveButtons } from './ui/interactiveButtons.js';
+import { loadCameraMarkers } from './objects/cameraMarkers.js';
+import { CameraNavigator } from './ui/cameraNavigator.js';
+import { SidePanel } from './ui/sidePanel.js';
+
+// ================== SCENE ==================
+const scene = new THREE.Scene();
+
+// ================== CAMERA / CONTROLS CONFIG ==================
+const CAMERA_CONFIG = {
+    startPosition: { x: -10, y: 5, z: 10 },
+    target: { x: 0, y: 3.5, z: 0 },
+    minPolarAngle: 45,
+    maxPolarAngle: 100,
+    minDistance: 2,
+    maxDistance: 20,
+    minAzimuthAngle: -Infinity,
+    maxAzimuthAngle: Infinity,
+    enableDamping: true,
+    dampingFactor: 0.08,
+    rotateSpeed: 0.6,
+    zoomSpeed: 0.8,
+};
+
+// ================================================================
+// ================== TWEAK CAMERA DESTINATIONS HERE ==============
+// ================================================================
+const BUTTON_DESTINATIONS = {
+    profile: {
+        markerName: 'Empty001',
+        pageUrl: './pages/profile.html',
+        panelSide: 'right',
+        offsetPosition: { x: -2.8, y: -1.4, z: -4.0 },
+        offsetRotationDeg: { x: -90, y: 40, z: 0 },
+    },
+    project: {
+        markerName: 'Empty002',
+        pageUrl: './pages/project.html',
+        panelSide: 'left',
+        offsetPosition: { x: -33, y: 2.2, z: 19.5 },
+        offsetRotationDeg: { x: -90, y: -20, z: 0 },
+    },
+    contact: {
+        markerName: 'Empty003',
+        pageUrl: './pages/contact.html',
+        panelSide: 'right',
+        offsetPosition: { x: 15, y: 0, z: 38 },
+        offsetRotationDeg: { x: -95, y: -18, z: 0 },
+    },
+};
+// ================================================================
+
+// ================== CAMERA ==================
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(
+    CAMERA_CONFIG.startPosition.x,
+    CAMERA_CONFIG.startPosition.y,
+    CAMERA_CONFIG.startPosition.z
+);
+
+// ================== RENDERER ==================
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+
+document.body.appendChild(renderer.domElement);
+
+// ================== LIGHTS ==================
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+scene.add(ambientLight);
+
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight.position.set(10, 15, 10);
+scene.add(dirLight);
+
+// ================== DEPTH PRE-PASS TARGET ==================
+// A dedicated render target whose depth buffer is exposed as a texture, so
+// the black hole's lensing pass can compare "how far is the real geometry
+// at this pixel" against "how far is the black hole at this pixel" and
+// correctly hide the lensing effect behind solid objects.
+const depthRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
+depthRenderTarget.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
+depthRenderTarget.depthTexture.type = THREE.UnsignedIntType;
+
+// ================== RESIZE ==================
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight);
+    depthRenderTarget.setSize(window.innerWidth, window.innerHeight);
+});
+
+
+// The real ray-marched black hole. Every parameter — position, size, disk
+// inner/outer radius, tilt, spin, colors, lensing extent, ray-march
+// quality, antialiasing — is in the CONFIG object at the top of
+// objects/spaceBlackHole.js, or override any of it here:
+const blackHole = addSpaceBlackHole(scene, camera, {
+    position: { x: -40, y: -50, z: -500 },
+    radius: 55,
+    disk: {
+        innerRadius: 50,
+        outerRadius: 700,
+        tiltDeg: 0,
+        spinSpeed: -0.15,
+        colorStops: [
+            { stop: 0.0, color: '#FFF1AD' },
+            { stop: 0.15, color: '#ffcf3d' },
+            { stop: 0.4, color: '#ff8c1a' },
+            { stop: 0.7, color: '#e6420a' },
+            { stop: 1.0, color: '#7a1200' },
+        ],
+    },
+    lens: {
+        steps: 180,
+        aaSamples: 2,
+        lensRadius: 350
+    },
+});
+
+// Wire up depth occlusion — without this, the lensing pass has no idea
+// what's in front of it and will render straight through solid objects.
+blackHole.lensPass.setDepthTexture(depthRenderTarget.depthTexture);
+
+
+// ================== HDRI ==================
+// ================== HDRI ==================
+const rgbeLoader = new RGBELoader();
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+
+rgbeLoader.load('./hdri/outer-space-8k_2K_ae1d0eba-b64e-4c2a-ae9b-23b7b45f7026.hdr', (texture) => {
+    const envMap = pmremGenerator.fromEquirectangular(texture).texture;
+
+    // ✅ ONLY background (visual)
+    scene.background = envMap;
+
+    // ❌ REMOVE lighting influence
+    scene.environment = null;
+
+    // 🔥 control ONLY HDRI brightness
+    scene.backgroundIntensity = 2.8; // tweak this
+
+    // Give the black hole shader the RAW equirectangular texture (not the
+    // prefiltered PMREM version above) so it can sample real stars in the
+    // correctly bent escape direction of each photon, instead of a flat
+    // undistorted patch. We deliberately do NOT dispose this texture —
+    // the lensing shader samples it every frame.
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    blackHole.lensPass.setBackgroundTexture(texture);
+
+    pmremGenerator.dispose();
+});
+
+// ================== OBJECTS ==================
+addSpaceEngine(scene).catch((err) => console.error('spaceEngine did not load:', err));
+addSpacePlatform(scene).catch((err) => console.error('spacePlatform did not load:', err));
+addSpaceFood(scene).catch((err) => console.error('spaceFood did not load:', err));
+addSpaceMainEngine(scene).catch((err) => console.error('spaceMainEngine did not load:', err));
+addSpaceEmision1(scene).catch((err) => console.error('spaceEmision1 did not load:', err));
+addSpaceEmision2(scene).catch((err) => console.error('spaceEmision2 did not load:', err));
+addSpaceSatelite(scene).catch((err) => console.error('spaceSatelite did not load:', err));
+addSpaceBoard(scene).catch((err) => console.error('spaceBoard did not load:', err));
+addSpaceText1(scene).catch((err) => console.error('spaceText1 did not load:', err));
+let spaceRotatingText;
+addSpaceRotatingText(scene).then((result) => {
+  spaceRotatingText = result;
+  spaceRotatingText.pivot.position.set(-4.5, 11.2, 0.3);
+});
+addSpaceManshirt(scene).catch((err) => console.error('addSpaceManshirt did not load:', err));
+addSpaceManpant(scene).catch((err) => console.error('addSpaceManpant did not load:', err));
+addSpaceManskin(scene).catch((err) => console.error('addSpaceManskin did not load:', err));
+addSpaceManhair(scene).catch((err) => console.error('addSpaceManhair did not load:', err));
+addSpaceMantshirt(scene).catch((err) => console.error('addSpaceMantshirt did not load:', err));
+addSpaceExtra(scene).catch((err) => console.error('addSpaceExtra did not load:', err));
+addSpaceMetalgrey(scene).catch((err) => console.error('addSpaceMetalgrey did not load:', err));
+
+
+// ================== POST-PROCESSING ==================
+// CHANGED: classic EffectComposer. The black hole's lensing pass sits
+// between the base render and bloom, same ordering as blackhole.html.
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+composer.addPass(blackHole.lensPass);
+composer.addPass(new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.1, 0.5, 0.15  // strength, radius, threshold — same values as before
+));
+composer.addPass(new OutputPass());
+
+// ================== CONTROLS ==================
+const controls = new OrbitControls(camera, renderer.domElement);
+
+controls.target.set(
+    CAMERA_CONFIG.target.x,
+    CAMERA_CONFIG.target.y,
+    CAMERA_CONFIG.target.z
+);
+
+controls.enablePan = false;
+controls.minPolarAngle = THREE.MathUtils.degToRad(CAMERA_CONFIG.minPolarAngle);
+controls.maxPolarAngle = THREE.MathUtils.degToRad(CAMERA_CONFIG.maxPolarAngle);
+controls.minAzimuthAngle = CAMERA_CONFIG.minAzimuthAngle;
+controls.maxAzimuthAngle = CAMERA_CONFIG.maxAzimuthAngle;
+controls.minDistance = CAMERA_CONFIG.minDistance;
+controls.maxDistance = CAMERA_CONFIG.maxDistance;
+controls.enableDamping = CAMERA_CONFIG.enableDamping;
+controls.dampingFactor = CAMERA_CONFIG.dampingFactor;
+controls.rotateSpeed = CAMERA_CONFIG.rotateSpeed;
+controls.zoomSpeed = CAMERA_CONFIG.zoomSpeed;
+
+controls.update();
+
+// ================== CAMERA NAVIGATION + SIDE PANEL ==================
+const nav = new CameraNavigator(camera, controls);
+const sidePanel = new SidePanel();
+
+let cameraMarkers = {};
+
+Promise.all([
+    loadCameraMarkers('./3d_model/SpaceEmptyPosition1.glb'),
+    loadCameraMarkers('./3d_model/SpaceEmptyPosition2.glb'),
+    loadCameraMarkers('./3d_model/SpaceEmptyPosition3.glb'),
+]).then(([markers1, markers2, markers3]) => {
+    cameraMarkers = { ...markers1, ...markers2, ...markers3 };
+    console.log('Camera markers ready:', Object.keys(cameraMarkers));
+});
+
+sidePanel.onClose(() => {
+    nav.flyBack(1.4, () => nav.enableControls());
+});
+
+const rockField = addSpaceRockField(scene, {
+    count: 40,
+    ringCenter: { x: -100, y: 0, z: 0 },
+    ringRadius: 15,
+    ringSpread: 1.5,
+    travelDirection: { x: 1, y: 0, z: 0 },
+    travelDistance: 200,
+    speedMin: 0.3,
+    speedMax: 5.8,
+});
+
+console.log('Rock field children:', rockField.group.children.length);
+
+// ================== INTERACTIVE BUTTONS (single source of truth) ==================
+setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
+    console.log('Button clicked:', buttonId);
+
+    const destination = BUTTON_DESTINATIONS[buttonId];
+    if (!destination) {
+        console.warn(`No destination configured for button "${buttonId}"`);
+        return;
+    }
+
+    const marker = cameraMarkers[destination.markerName];
+    if (!marker) {
+        console.warn(
+            `Marker "${destination.markerName}" not found yet (still loading, or name mismatch).`
+        );
+        return;
+    }
+
+    const targetPos = new THREE.Vector3();
+    const targetQuat = new THREE.Quaternion();
+    marker.getWorldPosition(targetPos);
+    marker.getWorldQuaternion(targetQuat);
+
+    targetPos.x += destination.offsetPosition.x;
+    targetPos.y += destination.offsetPosition.y;
+    targetPos.z += destination.offsetPosition.z;
+
+    const extraRotation = new THREE.Euler(
+        THREE.MathUtils.degToRad(destination.offsetRotationDeg.x),
+        THREE.MathUtils.degToRad(destination.offsetRotationDeg.y),
+        THREE.MathUtils.degToRad(destination.offsetRotationDeg.z)
+    );
+    targetQuat.multiply(new THREE.Quaternion().setFromEuler(extraRotation));
+
+    nav.flyToQuat(targetPos, targetQuat, 1.4, () => {
+        sidePanel.show(destination.pageUrl, destination.panelSide);
+    });
+});
+
+// ================== LOOP ==================
+const clock = new THREE.Clock();
+let totalTime = 0;
+
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+
+    totalTime += delta;
+    spaceRotatingText?.update(delta);
+    if (nav.shouldUpdateControls()) {
+        controls.update();
+    }
+
+    rockField.update(delta);
+
+    // drive the black hole's disk spin + lensing update
+    blackHole.update(delta, camera);
+
+    // depth pre-pass: renders the scene once purely to capture depth, so
+    // the lensing pass can tell what real geometry sits in front of the
+    // black hole this frame.
+    renderer.setRenderTarget(depthRenderTarget);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+
+    composer.render();
+}
+animate();
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Croissant+One&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Jersey+10+Charted&family=Noto+Sans:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&family=Rubik:ital,wght@0,300..900;1,300..900&family=Science+Gothic:wght@100..900&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --glow: #2fbaff;
+    --glow-soft: #9fe4ff;
+    --bg: #060912;
+    --panel: rgba(20, 32, 60, 0.4);
+    --panel-strong: rgba(20, 32, 60, 0.65);
+    --text: #e8f2ff;
+    --muted: #9fb3d1;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Science Gothic', system-ui, sans-serif;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+
+  body {
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 70% 15%, #fff, transparent),
+      radial-gradient(1px 1px at 40% 70%, #fff, transparent),
+      radial-gradient(1px 1px at 85% 60%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 55% 45%, #fff, transparent),
+      radial-gradient(1px 1px at 10% 85%, #fff, transparent);
+    background-repeat: no-repeat;
+    padding: 30px 34px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+  }
+
+  .role-tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--glow-soft);
+    border: 1px solid rgba(47, 186, 255, 0.5);
+    border-radius: 999px;
+    padding: 4px 12px;
+    margin-bottom: 14px;
+    text-shadow: 0 0 8px rgba(47, 186, 255, 0.6);
+    align-self: flex-start;
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 18px rgba(47, 186, 255, 0.35);
+  }
+
+  .tagline {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--glow-soft);
+    font-style: italic;
+    max-width: 60ch;
+  }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(47,186,255,0.6), transparent);
+    margin: 0 0 24px;
+  }
+
+  /* ---- fixed scroll region ---- */
+  .contact-list-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  /* fade hints on the edges so it's visually obvious there's more to scroll */
+  .contact-list-wrap::before,
+  .contact-list-wrap::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 16px;
+    width: 28px;
+    pointer-events: none;
+    z-index: 2;
+    transition: opacity 0.2s ease;
+  }
+  .contact-list-wrap::before {
+    left: 0;
+    background: linear-gradient(90deg, var(--bg), transparent);
+    opacity: 0;
+  }
+  .contact-list-wrap::after {
+    right: 0;
+    background: linear-gradient(270deg, var(--bg), transparent);
+    opacity: 1;
+  }
+  .contact-list-wrap.at-start::before { opacity: 0; }
+  .contact-list-wrap.at-start::after { opacity: 1; }
+  .contact-list-wrap.at-end::after { opacity: 0; }
+  .contact-list-wrap.scrollable::before { opacity: 1; }
+
+  .contact-list {
+    display: flex;
+    flex-direction: row;
+    gap: 16px;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    scroll-behavior: smooth;
+    padding: 4px 4px 16px;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    cursor: grab;
+    -webkit-user-select: none;
+    user-select: none;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .contact-list.dragging {
+    cursor: grabbing;
+    scroll-snap-type: none;
+  }
+
+  .contact-list::-webkit-scrollbar { display: none; }
+
+  .contact-row {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+    width: 168px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    text-decoration: none;
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid rgba(47, 186, 255, 0.35);
+    border-radius: 12px;
+    padding: 18px 16px;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    position: relative;
+  }
+
+  .contact-row:hover {
+    transform: translateY(-3px);
+    border-color: rgba(47, 186, 255, 0.8);
+    box-shadow: 0 8px 22px rgba(47, 186, 255, 0.15);
+  }
+
+  .contact-row:focus-visible {
+    outline: 2px solid var(--glow);
+    outline-offset: 2px;
+  }
+
+  .icon {
+    width: 38px;
+    height: 38px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    background: rgba(47, 186, 255, 0.1);
+    border: 1px solid rgba(47, 186, 255, 0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .icon svg {
+    width: 18px;
+    height: 18px;
+    stroke: var(--glow-soft);
+    fill: none;
+    stroke-width: 1.8;
+  }
+
+  .contact-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+  }
+
+  .contact-label-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .contact-label {
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--glow);
+  }
+
+  .contact-value {
+    font-size: 13px;
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  .arrow {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .scroll-hint {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.06em;
+    margin: -10px 0 14px;
+  }
+</style>
+</head>
+<body>
+
+  <span class="role-tag">Contact</span>
+  <h1>Let's build something</h1>
+  <p class="tagline">[CTA line — e.g. "Open to freelance work, collaborations, and interesting problems. Reach out."]</p>
+  <div class="divider"></div>
+
+  <p class="scroll-hint">&#8592; drag or scroll &#8594;</p>
+
+  <div class="contact-list-wrap" id="listWrap">
+    <div class="contact-list" id="contactList">
+      <a class="contact-row" href="mailto:[email@example.com]">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z"/><path d="m3.5 6 8.5 7 8.5-7"/></svg>
+        </span>
+        <span class="contact-text">
+          <span class="contact-label-row">
+            <span class="contact-label">Email</span>
+            <span class="arrow">&#8594;</span>
+          </span>
+          <span class="contact-value">[email@example.com]</span>
+        </span>
+      </a>
+
+      <a class="contact-row" href="[github-profile-url]" target="_blank" rel="noopener">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 0 0-3.16 19.49c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.53 2.36 1.09 2.93.83.09-.65.35-1.09.63-1.34-2.22-.25-4.56-1.11-4.56-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.35 4.68-4.58 4.93.36.31.68.92.68 1.85v2.74c0 .26.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+        </span>
+        <span class="contact-text">
+          <span class="contact-label-row">
+            <span class="contact-label">GitHub</span>
+            <span class="arrow">&#8594;</span>
+          </span>
+          <span class="contact-value">[github.com/username]</span>
+        </span>
+      </a>
+
+      <a class="contact-row" href="[linkedin-profile-url]" target="_blank" rel="noopener">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><path d="M4.5 4.5h15a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1v-13a1 1 0 0 1 1-1Z"/><path d="M7.5 10.5v6M7.5 7.5v.01M11.5 16.5v-3.5c0-1.4 1-2.5 2.25-2.5S16 11.6 16 13v3.5M11.5 10.5v6"/></svg>
+        </span>
+        <span class="contact-text">
+          <span class="contact-label-row">
+            <span class="contact-label">LinkedIn</span>
+            <span class="arrow">&#8594;</span>
+          </span>
+          <span class="contact-value">[linkedin.com/in/username]</span>
+        </span>
+      </a>
+
+      <a class="contact-row" href="[instagram-profile-url]" target="_blank" rel="noopener">
+        <span class="icon">
+          <svg viewBox="0 0 24 24"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17" cy="7" r="0.6" fill="var(--glow-soft)" stroke="none"/></svg>
+        </span>
+        <span class="contact-text">
+          <span class="contact-label-row">
+            <span class="contact-label">Instagram</span>
+            <span class="arrow">&#8594;</span>
+          </span>
+          <span class="contact-value">[@username]</span>
+        </span>
+      </a>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const wrap = document.getElementById('listWrap');
+      const list = document.getElementById('contactList');
+
+      function updateFades() {
+        const maxScroll = list.scrollWidth - list.clientWidth;
+        const scrollable = maxScroll > 2;
+        wrap.classList.toggle('scrollable', scrollable);
+        wrap.classList.toggle('at-start', list.scrollLeft <= 2);
+        wrap.classList.toggle('at-end', list.scrollLeft >= maxScroll - 2);
+      }
+
+      // Let a plain vertical mouse-wheel scroll the list horizontally,
+      // since most mice don't have a horizontal wheel.
+      list.addEventListener('wheel', (e) => {
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          list.scrollLeft += e.deltaY;
+          e.preventDefault();
+        }
+      }, { passive: false });
+
+      // Click-and-drag scrolling.
+      let isDown = false;
+      let startX = 0;
+      let startScroll = 0;
+      let moved = false;
+
+      list.addEventListener('mousedown', (e) => {
+        isDown = true;
+        moved = false;
+        list.classList.add('dragging');
+        startX = e.pageX;
+        startScroll = list.scrollLeft;
+      });
+
+      window.addEventListener('mouseup', () => {
+        isDown = false;
+        list.classList.remove('dragging');
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isDown) return;
+        const dx = e.pageX - startX;
+        if (Math.abs(dx) > 4) moved = true;
+        list.scrollLeft = startScroll - dx;
+      });
+
+      // Prevent a dragged click from firing the link navigation.
+      list.addEventListener('click', (e) => {
+        if (moved) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }, true);
+
+      list.addEventListener('scroll', updateFades);
+      window.addEventListener('resize', updateFades);
+      updateFades();
+    })();
+  </script>
+
+</body>
+</html>

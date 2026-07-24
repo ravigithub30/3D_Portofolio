@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rim Light Toon Shader</title>
+<style>
+  html, body { margin:0; height:100%; overflow:hidden; background:#2b2b2e; }
+  canvas { display:block; }
+  #hint {
+    position:fixed; bottom:14px; left:50%; transform:translateX(-50%);
+    color:#9a9aa2; font-family:sans-serif; font-size:13px; letter-spacing:0.5px;
+    user-select:none;
+  }
+</style>
+</head>
+<body>
+<div id="hint">drag to rotate • scroll to zoom</div>
+<script>
+  window.addEventListener('error', (e) => {
+    const hint = document.getElementById('hint');
+    hint.textContent = 'Error: ' + e.message;
+    hint.style.color = '#ff6b6b';
+  });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
+<script>
+// =====================================================================
+// REUSABLE MATERIAL FACTORY
+// Call this for any object, any color. Works on irregular geometry
+// out of the box because the rim is fresnel-based (view-angle driven),
+// not a separate outline mesh — no per-shape tuning needed.
+// =====================================================================
+function makeToonRimMaterial({
+  baseColor = 0x5b8fef,   // lit color (the bright side)
+  shadowColor = 0x2e2158, // shadow color (the dark crescent)
+  rimColor = 0xf2f2ff,    // rim light color (usually white / near-white)
+  lightDir = new THREE.Vector3(0.6, 0.5, 0.7),
+  shadowEdge = 0.15,      // where the light/shadow split falls, -1..1 (0 = equator)
+  shadowSoftness = 0.04,  // how soft that split edge is (0 = razor sharp)
+  rimStart = 0.55,        // fresnel value where rim starts fading in (0..1)
+  rimEnd = 0.8,           // fresnel value where rim is fully opaque
+} = {}) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uBaseColor: { value: new THREE.Color(baseColor) },
+      uShadowColor: { value: new THREE.Color(shadowColor) },
+      uRimColor: { value: new THREE.Color(rimColor) },
+      uLightDir: { value: lightDir.clone().normalize() },
+      uShadowEdge: { value: shadowEdge },
+      uShadowSoftness: { value: shadowSoftness },
+      uRimStart: { value: rimStart },
+      uRimEnd: { value: rimEnd },
+    },
+    vertexShader: `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+        vNormal = normalize(mat3(modelMatrix) * normal);
+        vViewDir = normalize(cameraPosition - worldPosition.xyz);
+        gl_Position = projectionMatrix * viewMatrix * worldPosition;
+      }
+    `,
+    fragmentShader: `
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+
+      uniform vec3 uBaseColor;
+      uniform vec3 uShadowColor;
+      uniform vec3 uRimColor;
+      uniform vec3 uLightDir;
+      uniform float uShadowEdge;
+      uniform float uShadowSoftness;
+      uniform float uRimStart;
+      uniform float uRimEnd;
+
+      void main() {
+        vec3 N = normalize(vNormal);
+        vec3 V = normalize(vViewDir);
+        vec3 L = normalize(uLightDir);
+
+        // ---- flat 2-tone toon split (hard crescent boundary, softened a touch) ----
+        float ndl = dot(N, L);
+        float lit = smoothstep(uShadowEdge - uShadowSoftness, uShadowEdge + uShadowSoftness, ndl);
+        vec3 color = mix(uShadowColor, uBaseColor, lit);
+
+        // ---- fresnel rim light (naturally follows silhouette on ANY shape) ----
+        float fresnel = pow(1.0 - clamp(dot(N, V), 0.0, 1.0), 2.0);
+        float rim = smoothstep(uRimStart, uRimEnd, fresnel);
+        color = mix(color, uRimColor, rim);
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+  });
+}
+
+// =====================================================================
+// DEMO SCENE
+// =====================================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x2b2b2e);
+
+const camera = new THREE.PerspectiveCamera(38, window.innerWidth/window.innerHeight, 0.1, 100);
+camera.position.set(0.4, 0.3, 4.6);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(window.devicePixelRatio);
+document.body.appendChild(renderer.domElement);
+
+const controls = new THREE.OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 2;
+controls.maxDistance = 12;
+
+// --- Example 1: blue sphere, matching the reference image ---
+const blueMaterial = makeToonRimMaterial({
+  baseColor: 0x5b8fef,
+  shadowColor: 0x2e2158,
+  rimColor: 0xf2f2ff,
+});
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 64), blueMaterial);
+sphere.position.set(-1.4, 0, 0);
+scene.add(sphere);
+
+// --- Example 2: same shader, totally different object + different color ---
+// proves it works on irregular geometry with zero per-shape tuning
+const orangeMaterial = makeToonRimMaterial({
+  baseColor: 0xff8a3d,
+  shadowColor: 0x5c2308,
+  rimColor: 0xffe9c9,
+});
+const knot = new THREE.Mesh(new THREE.TorusKnotGeometry(0.55, 0.2, 150, 20), orangeMaterial);
+knot.position.set(1.6, 0, 0);
+scene.add(knot);
+
+// --- Example 3: green, on a bumpy/irregular icosahedron ---
+const greenMaterial = makeToonRimMaterial({
+  baseColor: 0x4fdb8f,
+  shadowColor: 0x0f3d29,
+  rimColor: 0xe4fff0,
+});
+const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(0.7, 1), greenMaterial);
+rock.position.set(0.1, 1.5, -0.5);
+scene.add(rock);
+
+// =====================================================================
+// TO USE ON YOUR OWN .glb MODEL:
+// =====================================================================
+// const myMaterial = makeToonRimMaterial({ baseColor: 0xYOUR_COLOR, shadowColor: 0xYOUR_SHADOW, rimColor: 0xffffff });
+// const loader = new THREE.GLTFLoader();
+// loader.load('./3d_model/yourModel.glb', (gltf) => {
+//   gltf.scene.traverse((child) => {
+//     if (child.isMesh) child.material = myMaterial;
+//   });
+//   scene.add(gltf.scene);
+// });
+// No outline mesh, no normal-offset thickness tuning needed — the rim
+// is baked into this one material and adapts to any silhouette automatically.
+
+// ---- Resize ----
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ---- Animate ----
+function animate() {
+  requestAnimationFrame(animate);
+  sphere.rotation.y += 0.004;
+  knot.rotation.y += 0.006;
+  knot.rotation.x += 0.003;
+  rock.rotation.y += 0.005;
+  rock.rotation.x += 0.002;
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

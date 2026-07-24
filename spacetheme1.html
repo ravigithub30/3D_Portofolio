@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Station HUD — Portfolio Overlay Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep: #030307;
+    --panel: rgba(6, 9, 18, 0.72);
+    --panel-solid: #0a0d17;
+    --red: #ff3b3b;
+    --red-dim: rgba(255,59,59,0.35);
+    --red-glow: rgba(255,59,59,0.55);
+    --blue: #4f8dff;
+    --blue-dim: rgba(79,141,255,0.35);
+    --blue-glow: rgba(79,141,255,0.5);
+    --gold: #ffb257;
+    --ink: #e9edf6;
+    --ink-dim: #7c86a1;
+    --ink-faint: #4a5268;
+    --display: 'Orbitron', sans-serif;
+    --nav: 'Rajdhani', sans-serif;
+    --mono: 'Space Mono', monospace;
+  }
+
+  *{ box-sizing:border-box; }
+
+  html,body{ height:100%; margin:0; }
+
+  body{
+    background:
+      radial-gradient(ellipse 60% 45% at 12% 30%, rgba(255,178,87,0.18), transparent 60%),
+      radial-gradient(ellipse 40% 35% at 78% 22%, rgba(79,141,255,0.10), transparent 65%),
+      radial-gradient(1px 1px at 15% 20%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 40% 60%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 65% 15%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 85% 70%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 92% 40%, #fff 100%, transparent),
+      radial-gradient(1px 1px at 25% 85%, #fff 100%, transparent),
+      linear-gradient(180deg, #05050a 0%, #030306 100%);
+    font-family: var(--nav);
+    color: var(--ink);
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ================= LEFT SIGNAGE NAV ================= */
+  .signage{
+    position:absolute;
+    top:50%;
+    left:64px;
+    transform: translateY(-50%);
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .signage .rail{
+    position:absolute;
+    left:-24px;
+    top:-30px;
+    bottom:-30px;
+    width:2px;
+    background: linear-gradient(180deg, transparent, var(--red-dim) 15%, var(--red-dim) 85%, transparent);
+  }
+  .nav-item{
+    all:unset;
+    cursor:pointer;
+    font-family: var(--display);
+    font-weight:600;
+    font-size:22px;
+    letter-spacing:.04em;
+    padding:12px 0;
+    color: var(--red);
+    text-shadow: 0 0 8px var(--red-glow), 0 0 22px rgba(255,59,59,0.25);
+    position:relative;
+    transition: color .25s ease, text-shadow .25s ease, transform .25s ease;
+  }
+  .nav-item::before{
+    content: attr(data-index);
+    font-family: var(--mono);
+    font-size:11px;
+    color: var(--ink-faint);
+    display:block;
+    letter-spacing:.15em;
+    margin-bottom:2px;
+    text-shadow:none;
+  }
+  .nav-item:hover{ transform: translateX(6px); }
+  .nav-item.active{
+    color: var(--blue);
+    text-shadow: 0 0 10px var(--blue-glow), 0 0 28px rgba(79,141,255,0.3);
+  }
+  .nav-item.active::after{
+    content:'';
+    position:absolute;
+    left:-24px;
+    top:50%;
+    width:16px;
+    height:2px;
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue-glow);
+  }
+
+  /* ================= HUD PANEL ================= */
+  .hud-wrap{
+    position:absolute;
+    top:50%;
+    right:6%;
+    transform: translateY(-50%);
+    width:min(480px, 42vw);
+  }
+
+  .panel{
+    position:relative;
+    background: var(--panel);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border: 1px solid var(--blue-dim);
+    clip-path: polygon(0 18px, 18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%);
+    padding: 30px 32px 34px;
+    animation: warpIn .5s cubic-bezier(.2,.8,.2,1) both;
+    overflow:hidden;
+  }
+  @keyframes warpIn{
+    from{ opacity:0; transform: translateX(18px) scale(.97); }
+    to{ opacity:1; transform: translateX(0) scale(1); }
+  }
+
+  /* corner brackets — signature element */
+  .bracket{ position:absolute; width:22px; height:22px; pointer-events:none; }
+  .bracket::before, .bracket::after{ content:''; position:absolute; background: var(--red); box-shadow: 0 0 6px var(--red-glow); }
+  .bracket.tl{ top:8px; left:8px; }
+  .bracket.tl::before{ width:100%; height:2px; top:0; left:0; }
+  .bracket.tl::after{ width:2px; height:100%; top:0; left:0; }
+  .bracket.br{ bottom:8px; right:8px; }
+  .bracket.br::before{ width:100%; height:2px; bottom:0; right:0; }
+  .bracket.br::after{ width:2px; height:100%; bottom:0; right:0; }
+
+  /* scanline sweep */
+  .panel .scan{
+    position:absolute; left:0; right:0; height:60px;
+    background: linear-gradient(180deg, transparent, rgba(79,141,255,0.08), transparent);
+    animation: sweep 4s linear infinite;
+    pointer-events:none;
+  }
+  @keyframes sweep{
+    0%{ top:-60px; }
+    100%{ top:100%; }
+  }
+
+  .eyebrow{
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.2em;
+    color: var(--blue);
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:10px;
+  }
+  .eyebrow .blip{
+    width:6px;height:6px;border-radius:50%;
+    background: var(--blue);
+    box-shadow: 0 0 8px var(--blue-glow);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.4;} }
+
+  .panel h1{
+    font-family: var(--display);
+    font-size: 26px;
+    font-weight:800;
+    letter-spacing:.02em;
+    margin: 0 0 6px;
+    color: var(--ink);
+  }
+  .panel .sub{
+    font-family: var(--mono);
+    font-size:11.5px;
+    color: var(--ink-dim);
+    margin-bottom:20px;
+    letter-spacing:.04em;
+  }
+  .divider{
+    height:1px;
+    background: linear-gradient(90deg, var(--blue-dim), transparent);
+    margin: 18px 0;
+  }
+  .panel p{
+    font-size:14.5px;
+    line-height:1.65;
+    color: var(--ink-dim);
+    margin:0 0 14px;
+  }
+
+  .project-list{ display:flex; flex-direction:column; gap:14px; }
+  .project-item{
+    border-left: 2px solid var(--red-dim);
+    padding-left:14px;
+  }
+  .project-item .p-title{
+    font-family: var(--display);
+    font-size:14px;
+    color: var(--ink);
+    letter-spacing:.02em;
+  }
+  .project-item .p-tag{
+    font-family: var(--mono);
+    font-size:10.5px;
+    color: var(--gold);
+    letter-spacing:.1em;
+  }
+
+  .contact-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:10px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+    font-family: var(--mono);
+    font-size:12.5px;
+  }
+  .contact-row span:first-child{ color: var(--ink-faint); letter-spacing:.1em; }
+  .contact-row span:last-child{ color: var(--ink); }
+
+  .close-btn{
+    position:absolute;
+    top:16px;
+    right:18px;
+    all:unset;
+    cursor:pointer;
+    font-family: var(--mono);
+    font-size:11px;
+    letter-spacing:.15em;
+    color: var(--ink-faint);
+    border: 1px solid var(--ink-faint);
+    padding:5px 10px;
+    transition: all .2s ease;
+  }
+  .close-btn:hover{
+    color: var(--red);
+    border-color: var(--red-dim);
+    box-shadow: 0 0 10px var(--red-dim);
+  }
+
+  .content{ display:none; }
+  .content.active{ display:block; }
+
+  @media (max-width: 760px){
+    .signage{ left:24px; }
+    .nav-item{ font-size:17px; }
+    .hud-wrap{ right:5%; width: 88vw; top:auto; bottom:24px; transform:none; }
+  }
+</style>
+</head>
+<body>
+
+  <nav class="signage">
+    <div class="rail"></div>
+    <button class="nav-item active" data-index="01" data-target="profile">Profile</button>
+    <button class="nav-item" data-index="02" data-target="project">Project</button>
+    <button class="nav-item" data-index="03" data-target="contact">Contact</button>
+  </nav>
+
+  <div class="hud-wrap">
+    <div class="panel">
+      <div class="bracket tl"></div>
+      <div class="bracket br"></div>
+      <div class="scan"></div>
+      <button class="close-btn">CLOSE ✕</button>
+
+      <div class="content active" id="profile">
+        <div class="eyebrow"><span class="blip"></span>SECTION 01 / IDENTITY</div>
+        <h1>Commander Log</h1>
+        <div class="sub">ROLE — DESIGNER &amp; DEVELOPER</div>
+        <div class="divider"></div>
+        <p>Swap this for a short bio — who you are, what you build, and the angle that makes your work worth orbiting.</p>
+        <p>Keep it to two or three lines; the HUD frame does the rest of the talking.</p>
+      </div>
+
+      <div class="content" id="project">
+        <div class="eyebrow"><span class="blip"></span>SECTION 02 / ARCHIVE</div>
+        <h1>Mission Log</h1>
+        <div class="sub">3 ENTRIES FOUND</div>
+        <div class="divider"></div>
+        <div class="project-list">
+          <div class="project-item">
+            <div class="p-title">Project Alpha</div>
+            <div class="p-tag">WEBGL · THREE.JS</div>
+          </div>
+          <div class="project-item">
+            <div class="p-title">Project Vega</div>
+            <div class="p-tag">REACT · NODE</div>
+          </div>
+          <div class="project-item">
+            <div class="p-title">Project Halo</div>
+            <div class="p-tag">UNITY · C#</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="content" id="contact">
+        <div class="eyebrow"><span class="blip"></span>SECTION 03 / TRANSMIT</div>
+        <h1>Open Channel</h1>
+        <div class="sub">AWAITING SIGNAL</div>
+        <div class="divider"></div>
+        <div class="contact-row"><span>EMAIL</span><span>you@domain.com</span></div>
+        <div class="contact-row"><span>GITHUB</span><span>@yourhandle</span></div>
+        <div class="contact-row"><span>LINKEDIN</span><span>/in/yourname</span></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const navItems = document.querySelectorAll('.nav-item');
+  const contents = document.querySelectorAll('.content');
+  navItems.forEach(btn => {
+    btn.addEventListener('click', () => {
+      navItems.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      const target = btn.dataset.target;
+      contents.forEach(c => c.classList.toggle('active', c.id === target));
+      // In your real scene: trigger the camera move to this section's position here.
+    });
+  });
+</script>
+
+</body>
+</html>

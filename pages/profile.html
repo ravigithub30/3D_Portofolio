@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Croissant+One&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Jersey+10+Charted&family=Noto+Sans:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&family=Rubik:ital,wght@0,300..900;1,300..900&family=Science+Gothic:wght@100..900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --glow: #2fbaff;
+    --glow-soft: #9fe4ff;
+    --bg: #060912;
+    --panel: rgba(20, 32, 60, 0.4);
+    --text: #e8f2ff;
+    --muted: #9fb3d1;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Science Gothic", sans-serif;
+    overflow-y: auto;
+    scrollbar-width: none;      /* Firefox */
+    -ms-overflow-style: none;   /* old Edge/IE */
+  }
+
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar {
+    display: none;              /* Chrome/Safari/new Edge */
+  }
+
+  body {
+    /* faint starfield, purely CSS */
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 70% 15%, #fff, transparent),
+      radial-gradient(1px 1px at 40% 70%, #fff, transparent),
+      radial-gradient(1px 1px at 85% 60%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 55% 45%, #fff, transparent),
+      radial-gradient(1px 1px at 10% 85%, #fff, transparent);
+    background-repeat: no-repeat;
+    padding: 30px 34px;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: relative;
+  }
+
+  /* ---- scroll shadow indicators ---- */
+  .scroll-shadow {
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: 34px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .scroll-shadow-top {
+    top: 0;
+    background: linear-gradient(180deg, var(--bg) 0%, rgba(6, 9, 18, 0) 100%);
+  }
+  .scroll-shadow-bottom {
+    bottom: 0;
+    background: linear-gradient(0deg, var(--bg) 0%, rgba(6, 9, 18, 0) 100%);
+  }
+  .scroll-shadow.visible { opacity: 1; }
+
+  .role-tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--glow-soft);
+    border: 1px solid rgba(47, 186, 255, 0.5);
+    border-radius: 999px;
+    padding: 4px 12px;
+    margin-bottom: 14px;
+    text-shadow: 0 0 8px rgba(47, 186, 255, 0.6);
+    align-self: flex-start;
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 18px rgba(47, 186, 255, 0.35);
+  }
+
+  .tagline {
+    margin: 0 0 16px;
+    font-size: 14px;
+    color: var(--glow-soft);
+    font-style: italic;
+  }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(47,186,255,0.6), transparent);
+    margin: 0 0 16px;
+  }
+
+  section {
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--glow);
+    margin: 0 0 8px;
+  }
+
+  .about {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text);
+    max-width: 60ch;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px 24px;
+  }
+
+  .pill-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .pill-list li {
+    font-size: 12px;
+    padding: 5px 11px;
+    border-radius: 8px;
+    background: var(--panel);
+    border: 1px solid rgba(47, 186, 255, 0.35);
+    color: var(--text);
+  }
+
+  .edu-item {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+    margin: 0;
+  }
+  .edu-item .muted {
+    display: block;
+    color: var(--muted);
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+  <div class="scroll-shadow scroll-shadow-top" id="shadowTop"></div>
+  <div class="scroll-shadow scroll-shadow-bottom" id="shadowBottom"></div>
+
+  <span class="role-tag">Creative Technical Developer</span>
+  <h1>Ravi</h1>
+  <p class="tagline">Building worlds where physics, shaders, and stories collide.</p>
+  <div class="divider"></div>
+
+  <section>
+    <h2>About</h2>
+    <p class="about">
+      I work at the intersection of code and craft — real-time 3D graphics,
+      game systems, and interactive experiences that don't just look good,
+      they behave correctly. Most of what I build lives in the browser:
+      shader-driven visuals, physically-motivated effects, and worlds people
+      can actually walk through.
+    </p>
+  </section>
+
+  <section>
+    <h2>Core Skills</h2>
+    <ul class="pill-list">
+      <li>Three.js / WebGL</li>
+      <li>GLSL Shaders</li>
+      <li>Game Development</li>
+      <li>Real-Time Rendering</li>
+      <li>Procedural Generation</li>
+      <li>Interactive 3D Experiences</li>
+      <li>Creative Coding</li>
+    </ul>
+  </section>
+
+  <div class="grid-2">
+    <section>
+      <h2>Education</h2>
+      <p class="edu-item">
+        [Degree / Program]
+        <span class="muted">[Institution — Year]</span>
+      </p>
+    </section>
+
+    <section>
+      <h2>Strengths</h2>
+      <ul class="pill-list">
+        <li>[Strength 1]</li>
+        <li>[Strength 2]</li>
+        <li>[Strength 3]</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Hobbies</h2>
+      <ul class="pill-list">
+        <li>[Hobby 1]</li>
+        <li>[Hobby 2]</li>
+        <li>[Hobby 3]</li>
+      </ul>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      const shadowTop = document.getElementById('shadowTop');
+      const shadowBottom = document.getElementById('shadowBottom');
+
+      function updateShadows() {
+        const scrollTop = body.scrollTop;
+        const maxScroll = body.scrollHeight - body.clientHeight;
+        shadowTop.classList.toggle('visible', scrollTop > 4);
+        shadowBottom.classList.toggle('visible', maxScroll > 4 && scrollTop < maxScroll - 4);
+      }
+
+      const body = document.body;
+      body.addEventListener('scroll', updateShadows);
+      window.addEventListener('resize', updateShadows);
+      updateShadows();
+    })();
+  </script>
+
+</body>
+</html>

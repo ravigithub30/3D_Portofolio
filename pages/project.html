@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Projects</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Creepster&family=Croissant+One&family=Google+Sans+Flex:opsz,wght@6..144,1..1000&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Jersey+10+Charted&family=Noto+Sans:ital,wght@0,100..900;1,100..900&family=Orbitron:wght@400..900&family=Rubik:ital,wght@0,300..900;1,300..900&family=Science+Gothic:wght@100..900&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --glow: #2fbaff;
+    --glow-soft: #9fe4ff;
+    --bg: #060912;
+    --panel: rgba(20, 32, 60, 0.4);
+    --panel-strong: rgba(20, 32, 60, 0.72);
+    --text: #e8f2ff;
+    --muted: #9fb3d1;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Science Gothic', system-ui, sans-serif;
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  html::-webkit-scrollbar, body::-webkit-scrollbar { display: none; }
+
+  body {
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 70% 15%, #fff, transparent),
+      radial-gradient(1px 1px at 40% 70%, #fff, transparent),
+      radial-gradient(1px 1px at 85% 60%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 55% 45%, #fff, transparent),
+      radial-gradient(1px 1px at 10% 85%, #fff, transparent),
+      radial-gradient(1px 1px at 30% 55%, #fff, transparent),
+      radial-gradient(1.5px 1.5px at 90% 25%, #fff, transparent);
+    background-repeat: no-repeat;
+    padding: 30px 34px 50px;
+    position: relative;
+  }
+
+  /* ---- page-level scroll shadow indicators ---- */
+  .scroll-shadow {
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: 34px;
+    pointer-events: none;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .scroll-shadow-top {
+    top: 0;
+    background: linear-gradient(180deg, var(--bg) 0%, rgba(6, 9, 18, 0) 100%);
+  }
+  .scroll-shadow-bottom {
+    bottom: 0;
+    background: linear-gradient(0deg, var(--bg) 0%, rgba(6, 9, 18, 0) 100%);
+  }
+  .scroll-shadow.visible { opacity: 1; }
+
+  .role-tag {
+    display: inline-block;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--glow-soft);
+    border: 1px solid rgba(47, 186, 255, 0.5);
+    border-radius: 999px;
+    padding: 4px 12px;
+    margin-bottom: 14px;
+    text-shadow: 0 0 8px rgba(47, 186, 255, 0.6);
+  }
+
+  h1 {
+    margin: 0 0 4px;
+    font-size: 30px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 18px rgba(47, 186, 255, 0.35);
+  }
+
+  .tagline {
+    margin: 0 0 20px;
+    font-size: 14px;
+    color: var(--glow-soft);
+    font-style: italic;
+  }
+
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, rgba(47,186,255,0.6), transparent);
+    margin: 0 0 24px;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 18px;
+  }
+
+  .card {
+    cursor: pointer;
+    background: var(--panel);
+    border: 1px solid rgba(47, 186, 255, 0.35);
+    border-radius: 12px;
+    overflow: hidden;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(47, 186, 255, 0.8);
+    box-shadow: 0 8px 24px rgba(47, 186, 255, 0.15);
+  }
+
+  .card:focus-visible {
+    outline: 2px solid var(--glow);
+    outline-offset: 2px;
+  }
+
+  .card-thumb {
+    aspect-ratio: 16 / 9;
+    position: relative;
+    background: linear-gradient(135deg, rgba(47,186,255,0.12), rgba(20,32,60,0.6));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .card-thumb::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(rgba(47,186,255,0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(47,186,255,0.08) 1px, transparent 1px);
+    background-size: 22px 22px;
+  }
+
+  .card-thumb span {
+    position: relative;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .card-body {
+    padding: 14px 16px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+
+  .card-body h3 {
+    margin: 0;
+    font-size: 15px;
+    color: #fff;
+  }
+
+  .card-body p {
+    margin: 0;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--muted);
+    flex: 1;
+  }
+
+  .pill-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+
+  .pill-list li {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: rgba(47, 186, 255, 0.1);
+    border: 1px solid rgba(47, 186, 255, 0.3);
+    color: var(--text);
+  }
+
+  /* Modal */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 5, 12, 0.75);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease;
+    z-index: 10;
+  }
+
+  .overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .modal {
+    width: 100%;
+    max-width: 480px;
+    max-height: 86vh;
+    overflow-y: auto;
+    background: var(--panel-strong);
+    border: 1px solid rgba(47, 186, 255, 0.4);
+    border-radius: 14px;
+    padding: 26px 28px 28px;
+    position: relative;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 30px rgba(47,186,255,0.08);
+    transform: translateY(8px) scale(0.98);
+    transition: transform 0.18s ease;
+    scrollbar-width: none;
+  }
+  .modal::-webkit-scrollbar { display: none; }
+
+  .overlay.open .modal {
+    transform: translateY(0) scale(1);
+  }
+
+  /* modal scroll shadows: pinned to the scrolling modal's own edges,
+     pulled out of flow so they don't add extra spacing */
+  .modal-shadow {
+    position: sticky;
+    left: 0;
+    right: 0;
+    height: 28px;
+    pointer-events: none;
+    z-index: 3;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .modal-shadow-top {
+    top: -26px;
+    margin-bottom: -28px;
+    background: linear-gradient(180deg, var(--panel-strong) 0%, rgba(20, 32, 60, 0) 100%);
+  }
+  .modal-shadow-bottom {
+    bottom: -28px;
+    margin-top: -28px;
+    background: linear-gradient(0deg, var(--panel-strong) 0%, rgba(20, 32, 60, 0) 100%);
+  }
+  .modal-shadow.visible { opacity: 1; }
+
+  .modal-close {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+    width: 30px;
+    height: 30px;
+    border-radius: 8px;
+    border: 1px solid rgba(47, 186, 255, 0.4);
+    background: var(--panel);
+    color: var(--glow-soft);
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    z-index: 4;
+  }
+  .modal-close:hover { border-color: var(--glow); }
+
+  .modal-thumb {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 10px;
+    border: 1px solid rgba(47, 186, 255, 0.35);
+    background: linear-gradient(135deg, rgba(47,186,255,0.12), rgba(20,32,60,0.6));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 18px;
+  }
+
+  .modal-thumb span {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .modal h2.title {
+    margin: 0 0 4px;
+    font-size: 24px;
+    font-weight: 700;
+    color: #fff;
+    text-shadow: 0 0 18px rgba(47, 186, 255, 0.35);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .modal .tagline {
+    margin: 0 0 16px;
+    font-size: 13.5px;
+  }
+
+  .section-label {
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--glow);
+    margin: 0 0 8px;
+  }
+
+  .modal section { margin-bottom: 16px; }
+
+  .feature-box {
+    display: flex;
+    gap: 10px;
+    padding: 12px 14px;
+    border-radius: 10px;
+    background: var(--panel);
+    border: 1px solid rgba(47, 186, 255, 0.35);
+  }
+
+  .feature-box .mark {
+    color: var(--glow);
+    text-shadow: 0 0 8px rgba(47, 186, 255, 0.6);
+  }
+
+  .feature-box p { margin: 0; font-size: 13px; line-height: 1.55; }
+
+  .links { display: flex; gap: 12px; margin-top: 4px; }
+
+  .btn {
+    flex: 1;
+    text-align: center;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    padding: 11px 16px;
+    border-radius: 8px;
+    transition: filter 0.15s ease, transform 0.15s ease;
+  }
+  .btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
+
+  .btn-primary {
+    color: #06121c;
+    background: linear-gradient(90deg, var(--glow), var(--glow-soft));
+    box-shadow: 0 0 18px rgba(47, 186, 255, 0.35);
+  }
+
+  .btn-secondary {
+    color: var(--text);
+    background: var(--panel);
+    border: 1px solid rgba(47, 186, 255, 0.45);
+  }
+</style>
+</head>
+<body>
+
+  <div class="scroll-shadow scroll-shadow-top" id="pageShadowTop"></div>
+  <div class="scroll-shadow scroll-shadow-bottom" id="pageShadowBottom"></div>
+
+  <span class="role-tag">Projects</span>
+  <h1>Ravi</h1>
+  <p class="tagline">Building worlds where physics, shaders, and stories collide.</p>
+  <div class="divider"></div>
+
+  <div class="grid" id="grid"></div>
+
+  <div class="overlay" id="overlay">
+    <div class="modal" id="modal">
+      <div class="modal-shadow modal-shadow-top" id="modalShadowTop"></div>
+      <button class="modal-close" id="modalClose" aria-label="Close">&times;</button>
+      <div class="modal-thumb"><span id="mThumb">[ Preview ]</span></div>
+      <h2 class="title" id="mName">[Project Name]</h2>
+      <p class="tagline" id="mTagline">[Description]</p>
+
+      <section>
+        <h3 class="section-label">Tech Stack</h3>
+        <ul class="pill-list" id="mStack"></ul>
+      </section>
+
+      <section>
+        <h3 class="section-label">Key Feature</h3>
+        <div class="feature-box">
+          <span class="mark">&#9670;</span>
+          <p id="mFeature">[Key feature]</p>
+        </div>
+      </section>
+
+      <section>
+        <div class="links">
+          <a class="btn btn-primary" id="mLive" href="#">Live Demo</a>
+          <a class="btn btn-secondary" id="mGithub" href="#">GitHub</a>
+        </div>
+      </section>
+      <div class="modal-shadow modal-shadow-bottom" id="modalShadowBottom"></div>
+    </div>
+  </div>
+
+<script>
+  // Add as many projects as you want here — the grid and modal render from this array.
+  const PROJECTS = [
+    {
+      thumb: "Space Scene",
+      name: "Three.js Space Scene",
+      tagline: "A modular real-time space environment with a physically based black hole.",
+      stack: ["Three.js", "GLSL", "WebGL"],
+      feature: "Schwarzschild geodesic ray-marcher rendering real gravitational lensing.",
+      live: "#",
+      github: "#",
+    },
+    {
+      thumb: "Möbius Chess",
+      name: "Möbius Strip Chess",
+      tagline: "A chess variant played on a Möbius strip board, rendered in 3D.",
+      stack: ["Three.js", "Game Design"],
+      feature: "Custom board topology where moving off one edge wraps you back in mirrored.",
+      live: "#",
+      github: "#",
+    },
+    {
+      thumb: "Mutant Boss",
+      name: "Godot Boss Fight",
+      tagline: "A boss encounter prototype with a decoupled health bar UI system.",
+      stack: ["Godot", "GDScript"],
+      feature: "Health bar UI fully decoupled from enemy logic via signals.",
+      live: "#",
+      github: "#",
+    },
+  ];
+
+  const grid = document.getElementById("grid");
+  const overlay = document.getElementById("overlay");
+  const modal = document.getElementById("modal");
+
+  function renderCards() {
+    PROJECTS.forEach((p, i) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", `Open details for ${p.name}`);
+
+      card.innerHTML = `
+        <div class="card-thumb"><span>${p.thumb}</span></div>
+        <div class="card-body">
+          <h3>${p.name}</h3>
+          <p>${p.tagline}</p>
+          <ul class="pill-list">${p.stack.map(s => `<li>${s}</li>`).join("")}</ul>
+        </div>
+      `;
+
+      card.addEventListener("click", () => openModal(i));
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openModal(i); }
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function openModal(i) {
+    const p = PROJECTS[i];
+    document.getElementById("mThumb").textContent = p.thumb;
+    document.getElementById("mName").textContent = p.name;
+    document.getElementById("mTagline").textContent = p.tagline;
+    document.getElementById("mFeature").textContent = p.feature;
+    document.getElementById("mLive").href = p.live;
+    document.getElementById("mGithub").href = p.github;
+    document.getElementById("mStack").innerHTML =
+      p.stack.map(s => `<li>${s}</li>`).join("");
+
+    overlay.classList.add("open");
+    modal.scrollTop = 0;
+    updateModalShadows();
+  }
+
+  function closeModal() {
+    overlay.classList.remove("open");
+  }
+
+  document.getElementById("modalClose").addEventListener("click", closeModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) closeModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeModal();
+  });
+
+  // ---- page-level scroll shadows ----
+  const pageShadowTop = document.getElementById("pageShadowTop");
+  const pageShadowBottom = document.getElementById("pageShadowBottom");
+
+  function updatePageShadows() {
+    const scrollTop = document.body.scrollTop;
+    const maxScroll = document.body.scrollHeight - document.body.clientHeight;
+    pageShadowTop.classList.toggle("visible", scrollTop > 4);
+    pageShadowBottom.classList.toggle("visible", maxScroll > 4 && scrollTop < maxScroll - 4);
+  }
+  document.body.addEventListener("scroll", updatePageShadows);
+  window.addEventListener("resize", updatePageShadows);
+
+  // ---- modal scroll shadows ----
+  const modalShadowTop = document.getElementById("modalShadowTop");
+  const modalShadowBottom = document.getElementById("modalShadowBottom");
+
+  function updateModalShadows() {
+    const scrollTop = modal.scrollTop;
+    const maxScroll = modal.scrollHeight - modal.clientHeight;
+    modalShadowTop.classList.toggle("visible", scrollTop > 4);
+    modalShadowBottom.classList.toggle("visible", maxScroll > 4 && scrollTop < maxScroll - 4);
+  }
+  modal.addEventListener("scroll", updateModalShadows);
+
+  renderCards();
+  updatePageShadows();
+</script>
+
+</body>
+</html>
