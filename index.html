@@ -30,6 +30,16 @@
   station hull, etc.) is nearer to the camera than the hole itself, and
   correctly hide the lensing effect behind solid objects instead of
   rendering through them.
+
+  CHANGED (shadows): renderer.shadowMap enabled, dirLight configured to
+  cast shadows with a shadow camera sized to where the station/satellite/
+  rocks actually sit, and every async object loader's promise is now
+  collected so we can wait for all of them to finish before walking the
+  scene graph and turning on castShadow/receiveShadow on every mesh in one
+  pass. Note: shadows only *receive* correctly on materials that support
+  shadow-map sampling (MeshStandardMaterial, MeshPhysicalMaterial, etc.) —
+  any mesh still using a raw custom ShaderMaterial will cast a shadow fine
+  but won't show shadows landing on it.
 -->
 <script type="importmap">
   {
@@ -150,15 +160,47 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 
+// shadows: on, with soft (PCF) filtering
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
 document.body.appendChild(renderer.domElement);
 
 // ================== LIGHTS ==================
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 1.5);
-dirLight.position.set(10, 15, 10);
+const dirLight = new THREE.DirectionalLight(0xffffff, 3.5);
+dirLight.position.set(-10, 15, -20);
+dirLight.castShadow = true;
+
+const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
+dirLight1.position.set(0, 1, 0);
+dirLight1.castShadow = true;
+
+// Shadow camera sized around where the station/satellite/rock field
+// actually sit (roughly the origin, tens of units across) — the black
+// hole itself is way out at z:-500 and doesn't need to be inside this box.
+dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.camera.near = 1;
+dirLight.shadow.camera.far = 150;
+dirLight.shadow.camera.left = -40;
+dirLight.shadow.camera.right = 40;
+dirLight.shadow.camera.top = 40;
+dirLight.shadow.camera.bottom = -40;
+dirLight.shadow.bias = -0.0015;
+
+dirLight1.shadow.mapSize.set(2048, 2048);
+dirLight1.shadow.camera.near = 1;
+dirLight1.shadow.camera.far = 150;
+dirLight1.shadow.camera.left = -40;
+dirLight1.shadow.camera.right = 40;
+dirLight1.shadow.camera.top = 40;
+dirLight1.shadow.camera.bottom = -40;
+dirLight1.shadow.bias = -0.0015;
+
 scene.add(dirLight);
+scene.add(dirLight1);
 
 // ================== DEPTH PRE-PASS TARGET ==================
 // A dedicated render target whose depth buffer is exposed as a texture, so
@@ -240,28 +282,102 @@ rgbeLoader.load('./hdri/outer-space-8k_2K_ae1d0eba-b64e-4c2a-ae9b-23b7b45f7026.h
 });
 
 // ================== OBJECTS ==================
-addSpaceEngine(scene).catch((err) => console.error('spaceEngine did not load:', err));
-addSpacePlatform(scene).catch((err) => console.error('spacePlatform did not load:', err));
-addSpaceFood(scene).catch((err) => console.error('spaceFood did not load:', err));
-addSpaceMainEngine(scene).catch((err) => console.error('spaceMainEngine did not load:', err));
-addSpaceEmision1(scene).catch((err) => console.error('spaceEmision1 did not load:', err));
-addSpaceEmision2(scene).catch((err) => console.error('spaceEmision2 did not load:', err));
-addSpaceSatelite(scene).catch((err) => console.error('spaceSatelite did not load:', err));
-addSpaceBoard(scene).catch((err) => console.error('spaceBoard did not load:', err));
-addSpaceText1(scene).catch((err) => console.error('spaceText1 did not load:', err));
-let spaceRotatingText;
-addSpaceRotatingText(scene).then((result) => {
-  spaceRotatingText = result;
-  spaceRotatingText.pivot.position.set(-4.5, 11.2, 0.3);
-});
-addSpaceManshirt(scene).catch((err) => console.error('addSpaceManshirt did not load:', err));
-addSpaceManpant(scene).catch((err) => console.error('addSpaceManpant did not load:', err));
-addSpaceManskin(scene).catch((err) => console.error('addSpaceManskin did not load:', err));
-addSpaceManhair(scene).catch((err) => console.error('addSpaceManhair did not load:', err));
-addSpaceMantshirt(scene).catch((err) => console.error('addSpaceMantshirt did not load:', err));
-addSpaceExtra(scene).catch((err) => console.error('addSpaceExtra did not load:', err));
-addSpaceMetalgrey(scene).catch((err) => console.error('addSpaceMetalgrey did not load:', err));
+// Every async loader's promise is captured (instead of fire-and-forget)
+// so we can wait for all of them below and then walk the finished scene
+// graph exactly once to enable shadows on every mesh.
+const objectLoadPromises = [
+    addSpaceEngine(scene).catch((err) => console.error('spaceEngine did not load:', err)),
+    addSpacePlatform(scene).catch((err) => console.error('spacePlatform did not load:', err)),
+    addSpaceFood(scene).catch((err) => console.error('spaceFood did not load:', err)),
+    addSpaceMainEngine(scene).catch((err) => console.error('spaceMainEngine did not load:', err)),
+    addSpaceEmision1(scene).catch((err) => console.error('spaceEmision1 did not load:', err)),
+    addSpaceEmision2(scene).catch((err) => console.error('spaceEmision2 did not load:', err)),
+    addSpaceSatelite(scene).catch((err) => console.error('spaceSatelite did not load:', err)),
+    addSpaceBoard(scene).catch((err) => console.error('spaceBoard did not load:', err)),
+    addSpaceText1(scene).catch((err) => console.error('spaceText1 did not load:', err)),
+    addSpaceManshirt(scene).catch((err) => console.error('addSpaceManshirt did not load:', err)),
+    addSpaceManpant(scene).catch((err) => console.error('addSpaceManpant did not load:', err)),
+    addSpaceManskin(scene).catch((err) => console.error('addSpaceManskin did not load:', err)),
+    addSpaceManhair(scene).catch((err) => console.error('addSpaceManhair did not load:', err)),
+    addSpaceMantshirt(scene).catch((err) => console.error('addSpaceMantshirt did not load:', err)),
+    addSpaceExtra(scene).catch((err) => console.error('addSpaceExtra did not load:', err)),
+    addSpaceMetalgrey(scene).catch((err) => console.error('addSpaceMetalgrey did not load:', err)),
+];
 
+let spaceRotatingText;
+objectLoadPromises.push(
+    addSpaceRotatingText(scene).then((result) => {
+        spaceRotatingText = result;
+        spaceRotatingText.pivot.position.set(-4.5, 11.2, 0.3);
+    })
+);
+
+// Once every loader above has settled, walk the whole scene graph and
+// turn on shadow casting/receiving for every mesh in a single pass.
+// Note: receiveShadow only has a visible effect on materials that support
+// shadow-map sampling (MeshStandardMaterial, MeshPhysicalMaterial, etc.).
+// Any mesh still on a raw custom ShaderMaterial will cast fine but won't
+// show shadows landing on it.
+Promise.all(objectLoadPromises).then(() => {
+    let meshCount = 0;
+    const materialTypeCounts = {};
+    const unsupportedMeshes = [];
+
+    scene.traverse((obj) => {
+        if (!obj.isMesh) return;
+        meshCount++;
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+
+        // A mesh can have one material or an array of materials
+        // (multi-material geometry) — check every slot.
+        const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+        mats.forEach((mat) => {
+            if (!mat) return;
+            const type = mat.type;
+            materialTypeCounts[type] = (materialTypeCounts[type] || 0) + 1;
+
+            // These material types have no built-in shadow-map sampling
+            // in their shader, so receiveShadow will silently do nothing
+            // even though the flag is set to true.
+            const supportsReceivingShadows = [
+                'MeshStandardMaterial',
+                'MeshPhysicalMaterial',
+                'MeshPhongMaterial',
+                'MeshLambertMaterial',
+                'MeshToonMaterial',
+            ].includes(type);
+
+            if (!supportsReceivingShadows) {
+                unsupportedMeshes.push({ name: obj.name || '(unnamed)', materialType: type });
+            }
+        });
+    });
+
+    console.log(`Shadows enabled on ${meshCount} meshes.`);
+    console.log('Material types in scene:', materialTypeCounts);
+    if (unsupportedMeshes.length > 0) {
+        console.warn(
+            `${unsupportedMeshes.length} mesh(es) use a material that CANNOT receive shadows ` +
+            `(ShaderMaterial, MeshBasicMaterial, etc. have no shadow-map sampling code). ` +
+            `These will still cast shadows onto other objects, but nothing will ever shadow onto them:`,
+            unsupportedMeshes
+        );
+    }
+});
+
+// DEBUG: visualize the directional light's shadow frustum as a wireframe
+// box in the scene, so we can confirm it actually encloses the station
+// instead of missing it entirely. Press "H" to toggle it on/off.
+const shadowCameraHelper = new THREE.CameraHelper(dirLight.shadow.camera);
+shadowCameraHelper.visible = false;
+scene.add(shadowCameraHelper);
+window.addEventListener('keydown', (e) => {
+    if (e.key.toLowerCase() === 'h') {
+        shadowCameraHelper.visible = !shadowCameraHelper.visible;
+        console.log('Shadow camera helper visible:', shadowCameraHelper.visible);
+    }
+});
 
 // ================== POST-PROCESSING ==================
 // CHANGED: classic EffectComposer. The black hole's lensing pass sits
@@ -326,6 +442,15 @@ const rockField = addSpaceRockField(scene, {
     travelDistance: 200,
     speedMin: 0.3,
     speedMax: 5.8,
+});
+
+// The rock field is added synchronously (not part of objectLoadPromises
+// above), so its shadow flags are set here, right after creation.
+rockField.group.traverse((obj) => {
+    if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+    }
 });
 
 console.log('Rock field children:', rockField.group.children.length);
