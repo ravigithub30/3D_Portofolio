@@ -170,18 +170,15 @@ document.body.appendChild(renderer.domElement);
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffffff, 3.5);
+const dirLight = new THREE.DirectionalLight(0xFFE9BA, 3.5);
 dirLight.position.set(-10, 15, -20);
 dirLight.castShadow = true;
 
-const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
-dirLight1.position.set(0, 1, 0);
-dirLight1.castShadow = true;
 
 // Shadow camera sized around where the station/satellite/rock field
 // actually sit (roughly the origin, tens of units across) — the black
 // hole itself is way out at z:-500 and doesn't need to be inside this box.
-dirLight.shadow.mapSize.set(2048, 2048);
+dirLight.shadow.mapSize.set(712, 712);
 dirLight.shadow.camera.near = 1;
 dirLight.shadow.camera.far = 150;
 dirLight.shadow.camera.left = -40;
@@ -190,17 +187,39 @@ dirLight.shadow.camera.top = 40;
 dirLight.shadow.camera.bottom = -40;
 dirLight.shadow.bias = -0.0015;
 
-dirLight1.shadow.mapSize.set(2048, 2048);
-dirLight1.shadow.camera.near = 1;
-dirLight1.shadow.camera.far = 150;
-dirLight1.shadow.camera.left = -40;
-dirLight1.shadow.camera.right = 40;
-dirLight1.shadow.camera.top = 40;
-dirLight1.shadow.camera.bottom = -40;
-dirLight1.shadow.bias = -0.0015;
-
 scene.add(dirLight);
-scene.add(dirLight1);
+
+
+// A single light with a plain, tweakable radius. Change `pointLightRadius`
+// to any number, any time, to change how far this light reaches before
+// fading to zero. Nothing else is attached to this — no scene scanning,
+// no material changes, no auto-detection of anything.
+let pointLightRadius = 6;
+const pointLight = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius);
+pointLight.position.set(-1.85, 1.7, -2); // <-- move this to wherever you want the light
+
+pointLight.castShadow = true;
+pointLight.shadow.mapSize.set(1024, 1024);
+pointLight.shadow.bias = -0.002;
+
+
+scene.add(pointLight);
+
+let pointLightRadius1 = 6;
+const pointLight1 = new THREE.PointLight(0xBAEFFF, 4, pointLightRadius1);
+pointLight1.position.set(3.7, -0.5, 6.0); // <-- move this to wherever you want the light
+
+// pointLight1.castShadow = true;
+// pointLight1.shadow.mapSize.set(1024, 1024);
+// pointLight1.shadow.bias = -0.002;
+
+
+scene.add(pointLight1);
+ 
+// To change the radius at any point after this (e.g. from a slider, dev
+// tools console, or just editing the number above and reloading):
+//   pointLightRadius = 10;
+//   pointLight.distance = pointLightRadius;
 
 // ================== DEPTH PRE-PASS TARGET ==================
 // A dedicated render target whose depth buffer is exposed as a texture, so
@@ -234,8 +253,8 @@ const blackHole = addSpaceBlackHole(scene, camera, {
         tiltDeg: 0,
         spinSpeed: -0.15,
         colorStops: [
-            { stop: 0.0, color: '#FFF1AD' },
-            { stop: 0.15, color: '#ffcf3d' },
+            { stop: 0.0, color: '#ff8c1a' },
+            { stop: 0.15, color: '#ff8c1a' },
             { stop: 0.4, color: '#ff8c1a' },
             { stop: 0.7, color: '#e6420a' },
             { stop: 1.0, color: '#7a1200' },
@@ -387,7 +406,7 @@ composer.addPass(new RenderPass(scene, camera));
 composer.addPass(blackHole.lensPass);
 composer.addPass(new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth, window.innerHeight),
-    0.1, 0.5, 0.15  // strength, radius, threshold — same values as before
+    0.15, 0.5, 0.15  // strength, radius, threshold — same values as before
 ));
 composer.addPass(new OutputPass());
 

@@ -13,6 +13,10 @@ const CONFIG = {
     rimStart: 0.8,
     rimEnd: 1.2,
   },
+  emissive: {
+    color: 0x002AFF,
+    intensity: 2,
+  },
   outlineOptions: {
     color: 0x0a0a0a,
     thickness: 0.015,
@@ -26,6 +30,17 @@ const CONFIG = {
 export function addSpaceRotatingText(scene, overrides = {}) {// change for evry new object
   const cfg = { ...CONFIG, ...overrides };
   const material = makeToonRimMaterial(cfg.materialOptions);
+
+  // MeshToonMaterial (what makeToonRimMaterial builds internally) supports
+  // emissive/emissiveIntensity natively, same as MeshStandardMaterial.
+  // This makes the text glow visually (especially with your UnrealBloomPass
+  // picking it up) but note: it does NOT act as a real light source — it
+  // won't illuminate nearby geometry or cast a colored glow onto the
+  // station. If you want it to actually light up its surroundings, that
+  // needs a real THREE.PointLight placed at the text's position separately.
+  material.emissive = new THREE.Color(cfg.emissive.color);
+  material.emissiveIntensity = cfg.emissive.intensity;
+
   const loader = new GLTFLoader();
 
   return new Promise((resolve, reject) => {
