@@ -2,6 +2,7 @@
 <html>
 <head>
     <title>3D Scene</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
         html, body {
             margin: 0;
@@ -200,30 +201,33 @@ camera.position.set(
 );
 
 // ================== RENDERER ==================
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// AA is genuinely expensive on mobile GPUs (it's effectively supersampling
+// on tile-based renderers) — skip it entirely on mobile and rely on the
+// OutputPass + a capped pixel ratio to keep edges reasonable.
+const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-// Cap pixel ratio harder on mobile — portrait phones are usually the
-// lowest-powered GPUs hitting this scene, and DPR 3 on a phone is a lot
-// more fragment-shader work than DPR 2 on a desktop monitor.
-renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
+// DPR is the single biggest lever on mobile: DPR 3 (common on modern
+// phones) means 9x the fragment-shader work of DPR 1. Force it down hard.
+renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
 
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 
-// shadows: on, with soft (PCF) filtering
-renderer.shadowMap.enabled = true;
+// Shadows require an extra full depth-only render pass of the whole
+// scene, PLUS PCF soft-shadow filtering costs extra samples per pixel in
+// the main pass. On mobile this is dropped entirely — it's very likely
+// the actual bottleneck (portrait shows more of the shadow-camera
+// frustum vertically than landscape does with the same FOV, so it was
+// costing more specifically in portrait).
+renderer.shadowMap.enabled = !isMobile;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 document.body.appendChild(renderer.domElement);
 
 // Prevent touch-drag on the canvas from being interpreted as a page
-// gesture (pull-to-refresh, address-bar collapse/expand, etc). This is
-// the biggest single fix for portrait-mode mobile lag: without it,
-// orbiting the camera also nudges the browser chrome, which changes
-// window.innerHeight, which fires `resize`, which reallocates GPU render
-// targets — every drag frame.
+// gesture (pull-to-refresh, address-bar collapse/expand, etc).
 renderer.domElement.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
 renderer.domElement.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
@@ -233,16 +237,15 @@ scene.add(ambientLight);
 
 const dirLight = new THREE.DirectionalLight(0xFFE9BA, 3.5);
 dirLight.position.set(-10, 15, -20);
-dirLight.castShadow = true;
 
 
 // Shadow camera sized around where the station/satellite/rock field
 // actually sit (roughly the origin, tens of units across) — the black
 // hole itself is way out at z:-500 and doesn't need to be inside this box.
-// Shadow map is smaller on mobile — this is one of the more expensive
-// per-frame costs (a full extra depth-only render pass) and portrait
-// phones feel it the most.
-dirLight.shadow.mapSize.set(isMobile ? 512 : 712, isMobile ? 512 : 712);
+// dirLight.castShadow is forced off on mobile below, so this config is a
+// no-op there, but left in place for desktop.
+dirLight.castShadow = !isMobile;
+dirLight.shadow.mapSize.set(712, 712);
 dirLight.shadow.camera.near = 1;
 dirLight.shadow.camera.far = 150;
 dirLight.shadow.camera.left = -40;
@@ -263,12 +266,13 @@ const pointLight = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius);
 pointLight.position.set(-1.85, 1.7, -2); // <-- move this to wherever you want the light
 
 // Point-light shadows render the scene 6 times (once per cube-map face)
-// EVERY frame — by far the most expensive shadow type in the scene. Skip
-// it on mobile entirely; the directional light shadow still does the
-// heavy lifting visually.
+// EVERY frame — by far the most expensive shadow type in the scene. Off
+// on mobile entirely.
 pointLight.castShadow = !isMobile;
-pointLight.shadow.mapSize.set(1024, 1024);
-pointLight.shadow.bias = -0.002;
+if (!isMobile) {
+    pointLight.shadow.mapSize.set(1024, 1024);
+    pointLight.shadow.bias = -0.002;
+}
 
 
 scene.add(pointLight);
@@ -328,6 +332,10 @@ function applyResize() {
     renderer.setSize(w, h);
     composer.setSize(w, h);
     depthRenderTarget.setSize(w, h);
+
+    // composer.setSize() resets every pass to full resolution, so redo the
+    // mobile bloom downscale afterward.
+    bloomPass.setSize(w * bloomResScale, h * bloomResScale);
 }
 
 window.addEventListener('resize', () => {
@@ -456,8 +464,11 @@ Promise.all(objectLoadPromises).then(() => {
     scene.traverse((obj) => {
         if (!obj.isMesh) return;
         meshCount++;
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+        // No point flagging shadow casting/receiving on mobile — shadowMap
+        // is disabled there, so these flags would be dead weight the
+        // renderer still has to check per-mesh, per-frame.
+        obj.castShadow = !isMobile;
+        obj.receiveShadow = !isMobile;
 
         // A mesh can have one material or an array of materials
         // (multi-material geometry) — check every slot.
@@ -515,10 +526,16 @@ window.addEventListener('keydown', (e) => {
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 // composer.addPass(blackHole.lensPass);
-composer.addPass(new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+// UnrealBloomPass runs a whole downsample/blur/upsample chain at the
+// resolution you pass it, every frame. On mobile we render that chain at
+// roughly half resolution — bloom is a soft glow effect so the quality
+// loss is barely visible, but the cost drops by ~4x.
+const bloomResScale = isMobile ? 0.5 : 1;
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth * bloomResScale, window.innerHeight * bloomResScale),
     0.15, 0.5, 0.15  // strength, radius, threshold — same values as before
-));
+);
+composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
 // ================== CONTROLS ==================
@@ -564,7 +581,7 @@ sidePanel.onClose(() => {
 });
 
 const rockField = addSpaceRockField(scene, {
-    count: 40,
+    count: isMobile ? 18 : 40,
     ringCenter: { x: -100, y: 0, z: 0 },
     ringRadius: 15,
     ringSpread: 1.5,
@@ -578,8 +595,8 @@ const rockField = addSpaceRockField(scene, {
 // above), so its shadow flags are set here, right after creation.
 rockField.group.traverse((obj) => {
     if (obj.isMesh) {
-        obj.castShadow = true;
-        obj.receiveShadow = true;
+        obj.castShadow = !isMobile;
+        obj.receiveShadow = !isMobile;
     }
 });
 
