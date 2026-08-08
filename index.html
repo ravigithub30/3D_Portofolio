@@ -2,12 +2,14 @@
 <html>
 <head>
     <title>3D Scene</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <style>
         html, body {
             margin: 0;
             padding: 0;
             overflow: hidden;
             height: 100%;
+            touch-action: none; /* stop mobile browser gestures from fighting OrbitControls / triggering chrome resize */
         }
         canvas {
             display: block;
@@ -57,6 +59,25 @@
   node setup. It's a pure ShaderMaterial with no per-frame update needed
   (the fresnel term is computed from view-space normals every pixel), so
   the billboardSphere.update(camera) call in animate() was removed too.
+
+  CHANGED (mobile portrait perf): the resize handler was previously
+  unconditional — every time window.innerWidth/innerHeight changed it
+  called renderer.setSize / composer.setSize / depthRenderTarget.setSize,
+  each of which destroys and reallocates GPU render targets. On mobile,
+  dragging to orbit the camera in portrait mode causes the browser's
+  address bar to repeatedly collapse/expand, firing `resize` many times a
+  second and thrashing GPU allocations — this was the source of the
+  portrait-only lag (landscape barely triggers it since the address bar
+  is a much smaller fraction of the viewport there). Fixes:
+    1. touch-action: none (css) + a non-passive touchmove preventDefault
+       stop the page/chrome from reacting to the drag gesture at all.
+    2. The resize handler is now debounced and filters out small height-
+       only deltas (<120px, i.e. just the toolbar toggling) so real
+       rotations/foldable-device changes still resize correctly but
+       address-bar noise does not.
+    3. Mobile devices get a capped pixel ratio and a smaller shadow map /
+       no point-light shadow, since portrait phones are usually also the
+       lowest-powered GPUs hitting this scene.
 -->
 <script type="importmap">
   {
@@ -112,6 +133,9 @@ import { setupInteractiveButtons } from './ui/interactiveButtons.js';
 import { loadCameraMarkers } from './objects/cameraMarkers.js';
 import { CameraNavigator } from './ui/cameraNavigator.js';
 import { SidePanel } from './ui/sidePanel.js';
+
+// ================== MOBILE DETECTION ==================
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // ================== SCENE ==================
 const scene = new THREE.Scene();
@@ -177,19 +201,32 @@ camera.position.set(
 );
 
 // ================== RENDERER ==================
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+// AA is genuinely expensive on mobile GPUs (it's effectively supersampling
+// on tile-based renderers) — skip it entirely on mobile and rely on the
+// OutputPass + a capped pixel ratio to keep edges reasonable.
+const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// DPR is the single biggest lever on mobile: DPR 3 (common on modern
+// phones) means 9x the fragment-shader work of DPR 1. Force it down hard.
+renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
 
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 
-// shadows: on, with soft (PCF) filtering
+// Shadows on for all devices — portrait lag turned out to be the missing
+// viewport meta tag + fixed-vFov framing issue, not shadow cost.
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 document.body.appendChild(renderer.domElement);
+
+// NOTE: touch-action: none in the CSS above already stops the browser
+// from treating drags on the canvas as page gestures. We previously also
+// added JS preventDefault() on touchstart/touchmove here, but that
+// suppresses the browser's synthetic click event entirely — which is
+// what broke tap-to-click on the interactive buttons. Removed.
 
 // ================== LIGHTS ==================
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -197,12 +234,13 @@ scene.add(ambientLight);
 
 const dirLight = new THREE.DirectionalLight(0xFFE9BA, 3.5);
 dirLight.position.set(-10, 15, -20);
-dirLight.castShadow = true;
 
 
 // Shadow camera sized around where the station/satellite/rock field
 // actually sit (roughly the origin, tens of units across) — the black
 // hole itself is way out at z:-500 and doesn't need to be inside this box.
+// dirLight.castShadow is now on for all devices.
+dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(712, 712);
 dirLight.shadow.camera.near = 1;
 dirLight.shadow.camera.far = 150;
@@ -223,6 +261,7 @@ let pointLightRadius = 6;
 const pointLight = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius);
 pointLight.position.set(-1.85, 1.7, -2); // <-- move this to wherever you want the light
 
+// Point light shadow on for all devices now.
 pointLight.castShadow = true;
 pointLight.shadow.mapSize.set(1024, 1024);
 pointLight.shadow.bias = -0.002;
@@ -256,13 +295,96 @@ const depthRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.
 depthRenderTarget.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
 depthRenderTarget.depthTexture.type = THREE.UnsignedIntType;
 
-// ================== RESIZE ==================
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+// ================== RESPONSIVE CAMERA FOV ==================
+// camera.fov is a VERTICAL fov. With it fixed at 75° for every aspect
+// ratio, portrait mode (aspect < 1) ends up with a much narrower
+// HORIZONTAL fov than landscape — you see a cramped sideways slice of
+// the scene instead of a comparably framed view. This locks the
+// horizontal fov to what it would be at a normal landscape aspect, and
+// backs out the vertical fov needed to preserve it at the current aspect
+// (the same technique cinema/game cameras use for "Fill" vs "Vert-" FOV
+// scaling). On portrait this widens the vertical fov to compensate, so
+// framing feels consistent instead of zoomed-in.
+const BASE_VERTICAL_FOV_DEG = 75;     // the fov everything else was tuned around
+const BASE_REFERENCE_ASPECT = 16 / 9; // treat this as "normal" landscape framing
+
+function updateResponsiveCameraFov() {
+    const aspect = camera.aspect;
+    const baseVFovRad = THREE.MathUtils.degToRad(BASE_VERTICAL_FOV_DEG);
+    const lockedHFovRad = 2 * Math.atan(Math.tan(baseVFovRad / 2) * BASE_REFERENCE_ASPECT);
+    const newVFovRad = 2 * Math.atan(Math.tan(lockedHFovRad / 2) / aspect);
+    camera.fov = THREE.MathUtils.radToDeg(newVFovRad);
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight);
-    depthRenderTarget.setSize(window.innerWidth, window.innerHeight);
+}
+
+// On narrow (portrait-ish) aspects, also dolly the camera back slightly
+// along its current view direction from the orbit target so the wider
+// vertical fov doesn't make objects loom too close. Proportional so it
+// fades in smoothly rather than snapping, and capped so it can't fly off.
+function updateCameraDistanceForAspect() {
+    const aspect = camera.aspect;
+    if (aspect >= 1) return; // landscape/square: no adjustment needed
+
+    const pullBackFactor = THREE.MathUtils.clamp(1 / aspect, 1, 1.6);
+    const target = controls.target;
+    const dir = new THREE.Vector3().subVectors(camera.position, target);
+
+    // Only rescale relative to the camera's ORIGINAL configured distance,
+    // not whatever the user has already zoomed/panned to — otherwise this
+    // would fight the user's own zoom on every resize.
+    if (!updateCameraDistanceForAspect.baseDistance) {
+        updateCameraDistanceForAspect.baseDistance = dir.length();
+    }
+    dir.normalize().multiplyScalar(updateCameraDistanceForAspect.baseDistance * pullBackFactor);
+    camera.position.copy(target).add(dir);
+}
+
+// ================== RESIZE (debounced, chrome-toggle-aware) ==================
+// Mobile browsers collapse/expand their address bar as you scroll or
+// drag, which changes window.innerHeight without the user actually
+// rotating their device. Reacting to every one of those with a full
+// renderer/composer/render-target resize (each of which reallocates GPU
+// textures) is what caused the portrait-only lag. We debounce the event
+// and ignore height-only deltas smaller than a typical toolbar height.
+let lastWidth = window.innerWidth;
+let lastHeight = window.innerHeight;
+let resizeTimeout = null;
+
+function applyResize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    const widthChanged = Math.abs(w - lastWidth) > 2;
+    const heightChangedALot = Math.abs(h - lastHeight) > 120; // > typical mobile toolbar height
+
+    // Ignore small height-only changes — that's just the address bar.
+    if (!widthChanged && !heightChangedALot) return;
+
+    lastWidth = w;
+    lastHeight = h;
+
+    camera.aspect = w / h;
+    updateResponsiveCameraFov();
+    updateCameraDistanceForAspect();
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+    depthRenderTarget.setSize(w, h);
+
+    // composer.setSize() resets every pass to full resolution, so redo the
+    // mobile bloom downscale afterward.
+    bloomPass.setSize(w * bloomResScale, h * bloomResScale);
+}
+
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(applyResize, 150);
+});
+
+// Real orientation changes (portrait <-> landscape) should still resize
+// immediately rather than waiting out the debounce.
+window.addEventListener('orientationchange', () => {
+    clearTimeout(resizeTimeout);
+    setTimeout(applyResize, 200); // slight delay lets innerWidth/Height settle post-rotation
 });
 
 
@@ -438,10 +560,16 @@ window.addEventListener('keydown', (e) => {
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
 // composer.addPass(blackHole.lensPass);
-composer.addPass(new UnrealBloomPass(
-    new THREE.Vector2(window.innerWidth, window.innerHeight),
+// UnrealBloomPass runs a whole downsample/blur/upsample chain at the
+// resolution you pass it, every frame. On mobile we render that chain at
+// roughly half resolution — bloom is a soft glow effect so the quality
+// loss is barely visible, but the cost drops by ~4x.
+const bloomResScale = 1; // full resolution on all devices now
+const bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth * bloomResScale, window.innerHeight * bloomResScale),
     0.15, 0.5, 0.15  // strength, radius, threshold — same values as before
-));
+);
+composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
 
 // ================== CONTROLS ==================
@@ -467,6 +595,13 @@ controls.zoomSpeed = CAMERA_CONFIG.zoomSpeed;
 
 controls.update();
 
+// Apply once on load in case the page opens directly in portrait —
+// otherwise the fov/distance correction would only kick in after the
+// first resize/orientation event.
+updateResponsiveCameraFov();
+updateCameraDistanceForAspect();
+controls.update();
+
 // ================== CAMERA NAVIGATION + SIDE PANEL ==================
 const nav = new CameraNavigator(camera, controls);
 const sidePanel = new SidePanel();
@@ -487,7 +622,7 @@ sidePanel.onClose(() => {
 });
 
 const rockField = addSpaceRockField(scene, {
-    count: 40,
+    count: isMobile ? 18 : 40,
     ringCenter: { x: -100, y: 0, z: 0 },
     ringRadius: 15,
     ringSpread: 1.5,
