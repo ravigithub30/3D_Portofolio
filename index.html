@@ -8,6 +8,7 @@
             padding: 0;
             overflow: hidden;
             height: 100%;
+            touch-action: none; /* stop mobile browser gestures from fighting OrbitControls / triggering chrome resize */
         }
         canvas {
             display: block;
@@ -57,6 +58,25 @@
   node setup. It's a pure ShaderMaterial with no per-frame update needed
   (the fresnel term is computed from view-space normals every pixel), so
   the billboardSphere.update(camera) call in animate() was removed too.
+
+  CHANGED (mobile portrait perf): the resize handler was previously
+  unconditional — every time window.innerWidth/innerHeight changed it
+  called renderer.setSize / composer.setSize / depthRenderTarget.setSize,
+  each of which destroys and reallocates GPU render targets. On mobile,
+  dragging to orbit the camera in portrait mode causes the browser's
+  address bar to repeatedly collapse/expand, firing `resize` many times a
+  second and thrashing GPU allocations — this was the source of the
+  portrait-only lag (landscape barely triggers it since the address bar
+  is a much smaller fraction of the viewport there). Fixes:
+    1. touch-action: none (css) + a non-passive touchmove preventDefault
+       stop the page/chrome from reacting to the drag gesture at all.
+    2. The resize handler is now debounced and filters out small height-
+       only deltas (<120px, i.e. just the toolbar toggling) so real
+       rotations/foldable-device changes still resize correctly but
+       address-bar noise does not.
+    3. Mobile devices get a capped pixel ratio and a smaller shadow map /
+       no point-light shadow, since portrait phones are usually also the
+       lowest-powered GPUs hitting this scene.
 -->
 <script type="importmap">
   {
@@ -112,6 +132,9 @@ import { setupInteractiveButtons } from './ui/interactiveButtons.js';
 import { loadCameraMarkers } from './objects/cameraMarkers.js';
 import { CameraNavigator } from './ui/cameraNavigator.js';
 import { SidePanel } from './ui/sidePanel.js';
+
+// ================== MOBILE DETECTION ==================
+const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 // ================== SCENE ==================
 const scene = new THREE.Scene();
@@ -179,7 +202,11 @@ camera.position.set(
 // ================== RENDERER ==================
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Cap pixel ratio harder on mobile — portrait phones are usually the
+// lowest-powered GPUs hitting this scene, and DPR 3 on a phone is a lot
+// more fragment-shader work than DPR 2 on a desktop monitor.
+renderer.setPixelRatio(isMobile ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
 
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -190,6 +217,15 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 document.body.appendChild(renderer.domElement);
+
+// Prevent touch-drag on the canvas from being interpreted as a page
+// gesture (pull-to-refresh, address-bar collapse/expand, etc). This is
+// the biggest single fix for portrait-mode mobile lag: without it,
+// orbiting the camera also nudges the browser chrome, which changes
+// window.innerHeight, which fires `resize`, which reallocates GPU render
+// targets — every drag frame.
+renderer.domElement.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+renderer.domElement.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
 // ================== LIGHTS ==================
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -203,7 +239,10 @@ dirLight.castShadow = true;
 // Shadow camera sized around where the station/satellite/rock field
 // actually sit (roughly the origin, tens of units across) — the black
 // hole itself is way out at z:-500 and doesn't need to be inside this box.
-dirLight.shadow.mapSize.set(712, 712);
+// Shadow map is smaller on mobile — this is one of the more expensive
+// per-frame costs (a full extra depth-only render pass) and portrait
+// phones feel it the most.
+dirLight.shadow.mapSize.set(isMobile ? 512 : 712, isMobile ? 512 : 712);
 dirLight.shadow.camera.near = 1;
 dirLight.shadow.camera.far = 150;
 dirLight.shadow.camera.left = -40;
@@ -223,7 +262,11 @@ let pointLightRadius = 6;
 const pointLight = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius);
 pointLight.position.set(-1.85, 1.7, -2); // <-- move this to wherever you want the light
 
-pointLight.castShadow = true;
+// Point-light shadows render the scene 6 times (once per cube-map face)
+// EVERY frame — by far the most expensive shadow type in the scene. Skip
+// it on mobile entirely; the directional light shadow still does the
+// heavy lifting visually.
+pointLight.castShadow = !isMobile;
 pointLight.shadow.mapSize.set(1024, 1024);
 pointLight.shadow.bias = -0.002;
 
@@ -256,13 +299,47 @@ const depthRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.
 depthRenderTarget.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
 depthRenderTarget.depthTexture.type = THREE.UnsignedIntType;
 
-// ================== RESIZE ==================
-window.addEventListener('resize', () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+// ================== RESIZE (debounced, chrome-toggle-aware) ==================
+// Mobile browsers collapse/expand their address bar as you scroll or
+// drag, which changes window.innerHeight without the user actually
+// rotating their device. Reacting to every one of those with a full
+// renderer/composer/render-target resize (each of which reallocates GPU
+// textures) is what caused the portrait-only lag. We debounce the event
+// and ignore height-only deltas smaller than a typical toolbar height.
+let lastWidth = window.innerWidth;
+let lastHeight = window.innerHeight;
+let resizeTimeout = null;
+
+function applyResize() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    const widthChanged = Math.abs(w - lastWidth) > 2;
+    const heightChangedALot = Math.abs(h - lastHeight) > 120; // > typical mobile toolbar height
+
+    // Ignore small height-only changes — that's just the address bar.
+    if (!widthChanged && !heightChangedALot) return;
+
+    lastWidth = w;
+    lastHeight = h;
+
+    camera.aspect = w / h;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    composer.setSize(window.innerWidth, window.innerHeight);
-    depthRenderTarget.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(w, h);
+    composer.setSize(w, h);
+    depthRenderTarget.setSize(w, h);
+}
+
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(applyResize, 150);
+});
+
+// Real orientation changes (portrait <-> landscape) should still resize
+// immediately rather than waiting out the debounce.
+window.addEventListener('orientationchange', () => {
+    clearTimeout(resizeTimeout);
+    setTimeout(applyResize, 200); // slight delay lets innerWidth/Height settle post-rotation
 });
 
 
