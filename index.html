@@ -78,6 +78,14 @@
     3. Mobile devices get a capped pixel ratio and a smaller shadow map /
        no point-light shadow, since portrait phones are usually also the
        lowest-powered GPUs hitting this scene.
+
+  CHANGED (mobile side panel -> top panel): ui/sidePanel.js now takes the
+  isMobile flag and, on phones in portrait, docks the panel to the TOP
+  HALF of the screen instead of a 60%-wide side strip, leaving the bottom
+  half showing the live 3D scene. See the SidePanel constructor JSDoc for
+  details. Camera framing for that layout is tuned separately in
+  BUTTON_DESTINATIONS_MOBILE below, since the visible slice of the scene
+  is now a different shape than the desktop side-panel layout.
 -->
 <script type="importmap">
   {
@@ -167,6 +175,8 @@ const eclipseSphere = addSpaceEclipseSphere(scene);
 // ================================================================
 // ================== TWEAK CAMERA DESTINATIONS HERE ==============
 // ================================================================
+// Desktop / tablet / landscape-phone framing — the side panel takes 60%
+// width on one edge, leaving the rest of the screen as scene.
 const BUTTON_DESTINATIONS = {
     profile: {
         markerName: 'Empty001',
@@ -186,6 +196,39 @@ const BUTTON_DESTINATIONS = {
         markerName: 'Empty003',
         pageUrl: './pages/contact.html',
         panelSide: 'right',
+        offsetPosition: { x: 15, y: 0, z: 38 },
+        offsetRotationDeg: { x: -95, y: -18, z: 0 },
+    },
+};
+
+// Phone (portrait) framing — SidePanel now docks to the TOP HALF of the
+// screen on phones instead of a side strip (see ui/sidePanel.js), so the
+// visible slice of the scene is the BOTTOM HALF, a wide-short region
+// instead of a narrow-tall one. The desktop offsets above were tuned for
+// that narrow-tall visible area and will look off-center/zoomed wrong
+// here, so this is a separate set you tune independently — start from
+// these (copies of the desktop values) and nudge x/y/z and the rotation
+// in the device toolbar until each marker frames nicely in the bottom
+// half of the screen.
+const BUTTON_DESTINATIONS_MOBILE = {
+    profile: {
+        markerName: 'Empty001',
+        pageUrl: './pages/profile.html',
+        panelSide: 'right', // unused in the mobile top-docked layout
+        offsetPosition: { x: -2.8, y: -1.4, z: -4.0 },
+        offsetRotationDeg: { x: -90, y: 40, z: 0 },
+    },
+    project: {
+        markerName: 'Empty002',
+        pageUrl: './pages/project.html',
+        panelSide: 'left', // unused in the mobile top-docked layout
+        offsetPosition: { x: -33, y: 2.2, z: 19.5 },
+        offsetRotationDeg: { x: -90, y: -20, z: 0 },
+    },
+    contact: {
+        markerName: 'Empty003',
+        pageUrl: './pages/contact.html',
+        panelSide: 'right', // unused in the mobile top-docked layout
         offsetPosition: { x: 15, y: 0, z: 38 },
         offsetRotationDeg: { x: -95, y: -18, z: 0 },
     },
@@ -604,7 +647,10 @@ controls.update();
 
 // ================== CAMERA NAVIGATION + SIDE PANEL ==================
 const nav = new CameraNavigator(camera, controls);
-const sidePanel = new SidePanel();
+// SidePanel gets the isMobile flag so it knows to dock to the TOP HALF of
+// the screen (instead of the side) when running on a phone in portrait —
+// see the constructor JSDoc in ui/sidePanel.js.
+const sidePanel = new SidePanel(isMobile);
 
 let cameraMarkers = {};
 
@@ -647,7 +693,11 @@ console.log('Rock field children:', rockField.group.children.length);
 setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
     console.log('Button clicked:', buttonId);
 
-    const destination = BUTTON_DESTINATIONS[buttonId];
+    // Phones (portrait) use their own camera framing since the SidePanel
+    // docks to the top half of the screen there instead of a side strip —
+    // see BUTTON_DESTINATIONS_MOBILE above.
+    const destinations = isMobile ? BUTTON_DESTINATIONS_MOBILE : BUTTON_DESTINATIONS;
+    const destination = destinations[buttonId];
     if (!destination) {
         console.warn(`No destination configured for button "${buttonId}"`);
         return;

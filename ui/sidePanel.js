@@ -1,6 +1,20 @@
 // ui/sidePanel.js
 export class SidePanel {
-    constructor() {
+    /**
+     * @param {boolean} isMobileDevice - pass the same UA-based `isMobile`
+     *   flag used elsewhere (index.html). On phones held in portrait, the
+     *   panel docks to the TOP HALF of the screen instead of a side
+     *   strip, leaving the bottom half showing the 3D scene underneath.
+     *   Desktop/tablet and mobile-landscape keep the original side panel.
+     */
+    constructor(isMobileDevice = false) {
+        this.isMobileDevice = isMobileDevice;
+
+        // How much of the screen height the panel takes up in the mobile
+        // top-docked layout. Tweak this if you want more/less scene
+        // visible underneath the panel.
+        this.mobileTopHeightFraction = 0.5; // 50% — "half the screen"
+
         // Fixed margin so the panel never touches the screen edges
         this.margin = 24; // px — tweak this if you want more/less breathing room
 
@@ -28,13 +42,12 @@ export class SidePanel {
         this.overlay = document.createElement('div');
         Object.assign(this.overlay.style, {
             position: 'fixed',
-            top: `${this.margin}px`,
-            bottom: `${this.margin}px`,
-            width: '60%',
-            maxWidth: '900px',
             transition: 'transform 0.5s ease',
             zIndex: '10',
         });
+        // Actual top/bottom/left/right/width/height are assigned by
+        // _applyLayoutMode() below, since they differ between the
+        // desktop side-panel layout and the mobile top-panel layout.
 
         // ---- FRAME layer: the solid light-blue border shape ----
         this.frame = document.createElement('div');
@@ -124,6 +137,11 @@ export class SidePanel {
         document.body.appendChild(this.overlay);
 
         this._onCloseCallback = null;
+        this._isOpen = false; // tracked so layout-mode switches (rotation,
+                               // devtools resize) can restore the correct
+                               // open/closed transform instead of always
+                               // snapping shut.
+        this._layoutMode = null; // 'top' | 'side' — set by _applyLayoutMode()
         this.closeBtn.addEventListener('click', () => {
             this.hide();
             this._onCloseCallback?.();
@@ -135,9 +153,64 @@ export class SidePanel {
         this._resizeObserver = new ResizeObserver(() => this._updateSafePadding());
         this._resizeObserver.observe(this.overlay);
 
+        // Re-decide top-panel (mobile portrait) vs side-panel (everything
+        // else) any time the viewport changes — device rotation, or the
+        // browser window / devtools device-toolbar being resized.
+        window.addEventListener('resize', () => this._applyLayoutMode());
+        window.addEventListener('orientationchange', () => this._applyLayoutMode());
+
         // Default to right side, closed
         this._applySide('right');
-        this._setClosedTransform();
+        this._applyLayoutMode();
+        this._updateSafePadding();
+    }
+
+    // Phones in portrait get the top-docked layout; phones in landscape,
+    // tablets, and desktop keep the original side panel. Re-checked live
+    // instead of only once at construction time.
+    _isTopLayout() {
+        return this.isMobileDevice && window.innerHeight >= window.innerWidth;
+    }
+
+    _applyLayoutMode() {
+        const nextMode = this._isTopLayout() ? 'top' : 'side';
+        if (nextMode === this._layoutMode) return; // nothing changed
+        this._layoutMode = nextMode;
+
+        if (nextMode === 'top') {
+            // ---- Phone (portrait) layout: dock to the TOP HALF of the
+            // screen; the bottom half stays the visible 3D scene.
+            Object.assign(this.overlay.style, {
+                top: `${this.margin}px`,
+                bottom: '',
+                left: `${this.margin}px`,
+                right: `${this.margin}px`,
+                width: 'auto',
+                maxWidth: 'none',
+                height: `calc(${this.mobileTopHeightFraction * 100}% - ${this.margin * 1.5}px)`,
+            });
+        } else {
+            // ---- Desktop/tablet/landscape-phone layout: original side panel.
+            Object.assign(this.overlay.style, {
+                top: `${this.margin}px`,
+                bottom: `${this.margin}px`,
+                height: 'auto',
+                width: '60%',
+                maxWidth: '900px',
+            });
+            this._applySide(this.side || 'right');
+        }
+
+        // Re-apply whichever transform matches the current open/closed
+        // state, in the new layout's axis (translateY for top, translateX
+        // for side) — otherwise switching layout mid-session (e.g.
+        // rotating the phone) would leave a stale transform from the
+        // other axis.
+        if (this._isOpen) {
+            this._setOpenTransform();
+        } else {
+            this._setClosedTransform();
+        }
         this._updateSafePadding();
     }
 
@@ -154,6 +227,11 @@ export class SidePanel {
 
     _applySide(side) {
         this.side = side;
+        // Left/right anchoring only applies in the side-panel layout — in
+        // the mobile top layout the panel always spans left-margin to
+        // right-margin (set in _applyLayoutMode), so skip touching those
+        // properties there.
+        if (this._layoutMode === 'top') return;
         if (side === 'left') {
             this.overlay.style.left = `${this.margin}px`;
             this.overlay.style.right = '';
@@ -164,28 +242,44 @@ export class SidePanel {
     }
 
     _setClosedTransform() {
-        // Slide out toward whichever edge the panel is anchored to
+        // Slide out toward whichever edge the panel is anchored to: up
+        // off the top in mobile top-panel mode, sideways off-screen
+        // otherwise.
+        if (this._layoutMode === 'top') {
+            this.overlay.style.transform = 'translateY(-120%)';
+        } else {
+            this.overlay.style.transform =
+                this.side === 'left' ? 'translateX(-120%)' : 'translateX(120%)';
+        }
+    }
+
+    _setOpenTransform() {
         this.overlay.style.transform =
-            this.side === 'left' ? 'translateX(-120%)' : 'translateX(120%)';
+            this._layoutMode === 'top' ? 'translateY(0%)' : 'translateX(0%)';
     }
 
     /**
      * @param {string} url - page to load in the panel
      * @param {'left'|'right'} side - which side of the screen the panel appears on
+     *   (ignored in the mobile top-panel layout, where it always docks to
+     *   the top and spans the full width)
      */
     show(url, side = 'right') {
         this._applySide(side);
-        // Start off-screen on the correct side before the URL loads, then slide in
+        this._isOpen = true;
+        // Start off-screen in the correct direction before the URL loads,
+        // then slide in.
         this._setClosedTransform();
         this.iframe.src = url;
 
         requestAnimationFrame(() => {
-            this.overlay.style.transform = 'translateX(0%)';
+            this._setOpenTransform();
             this._updateSafePadding();
         });
     }
 
     hide() {
+        this._isOpen = false;
         this._setClosedTransform();
         setTimeout(() => { this.iframe.src = 'about:blank'; }, 500);
     }
