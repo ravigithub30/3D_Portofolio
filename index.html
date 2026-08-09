@@ -140,7 +140,13 @@ import { addSpaceEclipseSphere } from './objects/spaceEclipseSphere.js';
 import { setupInteractiveButtons } from './ui/interactiveButtons.js';
 import { loadCameraMarkers } from './objects/cameraMarkers.js';
 import { CameraNavigator } from './ui/cameraNavigator.js';
-import { SidePanel } from './ui/sidePanel.js';
+// NOTE: the ?v=2 query string is a cache-buster. Browsers (and GitHub
+// Pages' CDN) key their cache of ES module files by the exact URL —
+// without this, editing ui/sidePanel.js and re-deploying can keep
+// serving the old cached copy indefinitely even after a hard refresh.
+// Bump this number any time you edit sidePanel.js and want to be 100%
+// sure the new version is what actually loads.
+import { SidePanel } from './ui/sidePanel.js?v=2';
 
 // ================== MOBILE DETECTION ==================
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);

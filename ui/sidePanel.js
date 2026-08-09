@@ -10,6 +10,18 @@ export class SidePanel {
     constructor(isMobileDevice = false) {
         this.isMobileDevice = isMobileDevice;
 
+        // BUILD TAG — if you don't see this line in the console when the
+        // page loads, the browser (or GitHub Pages / your host's CDN) is
+        // still serving an OLD cached copy of this file, not this one.
+        // That's the #1 cause of "I changed the code but nothing changed"
+        // for ES module files like this — see the cache-busting note on
+        // the <script> import in index.html.
+        console.log(
+            '[SidePanel] mobile-top-panel build active — isMobileDevice:',
+            isMobileDevice,
+            'window:', window.innerWidth, 'x', window.innerHeight
+        );
+
         // How much of the screen height the panel takes up in the mobile
         // top-docked layout. Tweak this if you want more/less scene
         // visible underneath the panel.
@@ -176,6 +188,11 @@ export class SidePanel {
         const nextMode = this._isTopLayout() ? 'top' : 'side';
         if (nextMode === this._layoutMode) return; // nothing changed
         this._layoutMode = nextMode;
+        console.log(
+            '[SidePanel] layout mode ->', nextMode,
+            '(isMobileDevice:', this.isMobileDevice,
+            ', window:', window.innerWidth, 'x', window.innerHeight, ')'
+        );
 
         if (nextMode === 'top') {
             // ---- Phone (portrait) layout: dock to the TOP HALF of the
