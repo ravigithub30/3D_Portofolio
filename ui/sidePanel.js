@@ -3,9 +3,10 @@ export class SidePanel {
     /**
      * @param {boolean} isMobileDevice - pass the same UA-based `isMobile`
      *   flag used elsewhere (index.html). On phones held in portrait, the
-     *   panel docks to the TOP HALF of the screen instead of a side
-     *   strip, leaving the bottom half showing the 3D scene underneath.
-     *   Desktop/tablet and mobile-landscape keep the original side panel.
+     *   panel docks to the TOP or BOTTOM of the screen (see `mobileDock`
+     *   on show()) instead of a side strip, leaving the rest of the
+     *   screen showing the 3D scene underneath. Desktop/tablet and
+     *   mobile-landscape keep the original side panel.
      */
     constructor(isMobileDevice = false) {
         this.isMobileDevice = isMobileDevice;
@@ -17,15 +18,20 @@ export class SidePanel {
         // for ES module files like this — see the cache-busting note on
         // the <script> import in index.html.
         console.log(
-            '[SidePanel] mobile-top-panel build active — isMobileDevice:',
+            '[SidePanel] mobile-dock build active — isMobileDevice:',
             isMobileDevice,
             'window:', window.innerWidth, 'x', window.innerHeight
         );
 
         // How much of the screen height the panel takes up in the mobile
-        // top-docked layout. Tweak this if you want more/less scene
-        // visible underneath the panel.
-        this.mobileTopHeightFraction = 0.5; // 50% — "half the screen"
+        // docked layout. Tweak this if you want more/less scene visible
+        // around the panel.
+        this.mobileHeightFraction = 0.65; // 65% of the screen height
+
+        // Which edge the panel docks to on mobile — 'top' or 'bottom'.
+        // Set per-open via show(url, side, mobileDock); defaults to 'top'
+        // until the first show() call chooses otherwise.
+        this._mobileDock = 'top';
 
         // Fixed margin so the panel never touches the screen edges
         this.margin = 24; // px — tweak this if you want more/less breathing room
@@ -58,8 +64,9 @@ export class SidePanel {
             zIndex: '10',
         });
         // Actual top/bottom/left/right/width/height are assigned by
-        // _applyLayoutMode() below, since they differ between the
-        // desktop side-panel layout and the mobile top-panel layout.
+        // _applyLayoutMode() / _applyMobileGeometry() below, since they
+        // differ between the desktop side-panel layout and the mobile
+        // top/bottom-docked layout.
 
         // ---- FRAME layer: the solid light-blue border shape ----
         this.frame = document.createElement('div');
@@ -153,7 +160,7 @@ export class SidePanel {
                                // devtools resize) can restore the correct
                                // open/closed transform instead of always
                                // snapping shut.
-        this._layoutMode = null; // 'top' | 'side' — set by _applyLayoutMode()
+        this._layoutMode = null; // 'mobile' | 'side' — set by _applyLayoutMode()
         this.closeBtn.addEventListener('click', () => {
             this.hide();
             this._onCloseCallback?.();
@@ -165,7 +172,7 @@ export class SidePanel {
         this._resizeObserver = new ResizeObserver(() => this._updateSafePadding());
         this._resizeObserver.observe(this.overlay);
 
-        // Re-decide top-panel (mobile portrait) vs side-panel (everything
+        // Re-decide docked (mobile portrait) vs side-panel (everything
         // else) any time the viewport changes — device rotation, or the
         // browser window / devtools device-toolbar being resized.
         window.addEventListener('resize', () => this._applyLayoutMode());
@@ -177,15 +184,15 @@ export class SidePanel {
         this._updateSafePadding();
     }
 
-    // Phones in portrait get the top-docked layout; phones in landscape,
-    // tablets, and desktop keep the original side panel. Re-checked live
-    // instead of only once at construction time.
-    _isTopLayout() {
+    // Phones in portrait get the docked (top or bottom) layout; phones in
+    // landscape, tablets, and desktop keep the original side panel.
+    // Re-checked live instead of only once at construction time.
+    _isMobileLayout() {
         return this.isMobileDevice && window.innerHeight >= window.innerWidth;
     }
 
     _applyLayoutMode() {
-        const nextMode = this._isTopLayout() ? 'top' : 'side';
+        const nextMode = this._isMobileLayout() ? 'mobile' : 'side';
         if (nextMode === this._layoutMode) return; // nothing changed
         this._layoutMode = nextMode;
         console.log(
@@ -194,18 +201,8 @@ export class SidePanel {
             ', window:', window.innerWidth, 'x', window.innerHeight, ')'
         );
 
-        if (nextMode === 'top') {
-            // ---- Phone (portrait) layout: dock to the TOP HALF of the
-            // screen; the bottom half stays the visible 3D scene.
-            Object.assign(this.overlay.style, {
-                top: `${this.margin}px`,
-                bottom: '',
-                left: `${this.margin}px`,
-                right: `${this.margin}px`,
-                width: 'auto',
-                maxWidth: 'none',
-                height: `calc(${this.mobileTopHeightFraction * 100}% - ${this.margin * 1.5}px)`,
-            });
+        if (nextMode === 'mobile') {
+            this._applyMobileGeometry();
         } else {
             // ---- Desktop/tablet/landscape-phone layout: original side panel.
             Object.assign(this.overlay.style, {
@@ -219,16 +216,38 @@ export class SidePanel {
         }
 
         // Re-apply whichever transform matches the current open/closed
-        // state, in the new layout's axis (translateY for top, translateX
-        // for side) — otherwise switching layout mid-session (e.g.
-        // rotating the phone) would leave a stale transform from the
-        // other axis.
+        // state, in the new layout's axis (translateY for mobile,
+        // translateX for side) — otherwise switching layout mid-session
+        // (e.g. rotating the phone) would leave a stale transform from
+        // the other axis.
         if (this._isOpen) {
             this._setOpenTransform();
         } else {
             this._setClosedTransform();
         }
         this._updateSafePadding();
+    }
+
+    // Positions the overlay against whichever edge (top or bottom) is
+    // currently selected for mobile — this.mobileHeightFraction controls
+    // how much of the screen height it takes up. Called whenever the
+    // layout switches into mobile mode, and again whenever the dock edge
+    // changes (e.g. a "bottom" page opening after a "top" one) while
+    // already in mobile mode.
+    _applyMobileGeometry() {
+        const heightCss = `calc(${this.mobileHeightFraction * 100}% - ${this.margin * 1.5}px)`;
+        const base = {
+            left: `${this.margin}px`,
+            right: `${this.margin}px`,
+            width: 'auto',
+            maxWidth: 'none',
+            height: heightCss,
+        };
+        if (this._mobileDock === 'bottom') {
+            Object.assign(this.overlay.style, { ...base, top: '', bottom: `${this.margin}px` });
+        } else {
+            Object.assign(this.overlay.style, { ...base, top: `${this.margin}px`, bottom: '' });
+        }
     }
 
     _updateSafePadding() {
@@ -245,10 +264,10 @@ export class SidePanel {
     _applySide(side) {
         this.side = side;
         // Left/right anchoring only applies in the side-panel layout — in
-        // the mobile top layout the panel always spans left-margin to
-        // right-margin (set in _applyLayoutMode), so skip touching those
-        // properties there.
-        if (this._layoutMode === 'top') return;
+        // the mobile docked layout the panel always spans left-margin to
+        // right-margin (set in _applyMobileGeometry), so skip touching
+        // those properties there.
+        if (this._layoutMode === 'mobile') return;
         if (side === 'left') {
             this.overlay.style.left = `${this.margin}px`;
             this.overlay.style.right = '';
@@ -260,10 +279,11 @@ export class SidePanel {
 
     _setClosedTransform() {
         // Slide out toward whichever edge the panel is anchored to: up
-        // off the top in mobile top-panel mode, sideways off-screen
-        // otherwise.
-        if (this._layoutMode === 'top') {
-            this.overlay.style.transform = 'translateY(-120%)';
+        // off the top / down off the bottom in mobile docked mode,
+        // sideways off-screen otherwise.
+        if (this._layoutMode === 'mobile') {
+            this.overlay.style.transform =
+                this._mobileDock === 'bottom' ? 'translateY(120%)' : 'translateY(-120%)';
         } else {
             this.overlay.style.transform =
                 this.side === 'left' ? 'translateX(-120%)' : 'translateX(120%)';
@@ -272,17 +292,23 @@ export class SidePanel {
 
     _setOpenTransform() {
         this.overlay.style.transform =
-            this._layoutMode === 'top' ? 'translateY(0%)' : 'translateX(0%)';
+            this._layoutMode === 'mobile' ? 'translateY(0%)' : 'translateX(0%)';
     }
 
     /**
      * @param {string} url - page to load in the panel
      * @param {'left'|'right'} side - which side of the screen the panel appears on
-     *   (ignored in the mobile top-panel layout, where it always docks to
-     *   the top and spans the full width)
+     *   (desktop/tablet/landscape-phone side-panel layout only)
+     * @param {'top'|'bottom'} mobileDock - which edge the panel docks to
+     *   on phones in portrait (ignored otherwise). Defaults to 'top'.
      */
-    show(url, side = 'right') {
+    show(url, side = 'right', mobileDock = 'top') {
         this._applySide(side);
+        const dockChanged = mobileDock !== this._mobileDock;
+        this._mobileDock = mobileDock;
+        if (this._layoutMode === 'mobile' && dockChanged) {
+            this._applyMobileGeometry();
+        }
         this._isOpen = true;
         // Start off-screen in the correct direction before the URL loads,
         // then slide in.

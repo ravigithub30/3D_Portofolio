@@ -79,13 +79,16 @@
        no point-light shadow, since portrait phones are usually also the
        lowest-powered GPUs hitting this scene.
 
-  CHANGED (mobile side panel -> top panel): ui/sidePanel.js now takes the
-  isMobile flag and, on phones in portrait, docks the panel to the TOP
-  HALF of the screen instead of a 60%-wide side strip, leaving the bottom
-  half showing the live 3D scene. See the SidePanel constructor JSDoc for
-  details. Camera framing for that layout is tuned separately in
-  BUTTON_DESTINATIONS_MOBILE below, since the visible slice of the scene
-  is now a different shape than the desktop side-panel layout.
+  CHANGED (mobile side panel -> docked panel): ui/sidePanel.js now takes
+  the isMobile flag and, on phones in portrait, docks the panel to
+  either the TOP or BOTTOM of the screen (per-destination, via
+  `mobileDock` in BUTTON_DESTINATIONS_MOBILE below) instead of a
+  60%-wide side strip, taking up ~65% of the screen height and leaving
+  the rest showing the live 3D scene. See the SidePanel constructor
+  JSDoc for details. Camera framing for that layout is tuned separately
+  in BUTTON_DESTINATIONS_MOBILE, and the initial camera position/target/
+  zoom limits are tuned separately in CAMERA_CONFIG_MOBILE, since both
+  need different values than the desktop side-panel layout.
 -->
 <script type="importmap">
   {
@@ -146,7 +149,7 @@ import { CameraNavigator } from './ui/cameraNavigator.js';
 // serving the old cached copy indefinitely even after a hard refresh.
 // Bump this number any time you edit sidePanel.js and want to be 100%
 // sure the new version is what actually loads.
-import { SidePanel } from './ui/sidePanel.js?v=2';
+import { SidePanel } from './ui/sidePanel.js?v=3';
 
 // ================== MOBILE DETECTION ==================
 const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -155,7 +158,8 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const scene = new THREE.Scene();
 
 // ================== CAMERA / CONTROLS CONFIG ==================
-const CAMERA_CONFIG = {
+// Desktop/tablet/landscape-phone framing.
+const CAMERA_CONFIG_DESKTOP = {
     startPosition: { x: -10, y: 5, z: 10 },
     target: { x: 0, y: 3.5, z: 0 },
     minPolarAngle: 45,
@@ -169,6 +173,29 @@ const CAMERA_CONFIG = {
     rotateSpeed: 0.6,
     zoomSpeed: 0.8,
 };
+
+// Phone framing — separate from desktop so you can dial in different
+// start position/target, zoom limits (minDistance/maxDistance), and
+// rotation limits (min/maxPolarAngle, min/maxAzimuthAngle) for the
+// smaller portrait viewport without touching the desktop values above.
+// Starts as a copy of the desktop config — tune the numbers below in the
+// device toolbar until it frames the way you want on phones.
+const CAMERA_CONFIG_MOBILE = {
+    startPosition: { x: -10, y: 5, z: 10 },
+    target: { x: 0, y: 3.5, z: 0 },
+    minPolarAngle: 45,
+    maxPolarAngle: 100,
+    minDistance: 2,
+    maxDistance: 20,
+    minAzimuthAngle: -Infinity,
+    maxAzimuthAngle: Infinity,
+    enableDamping: true,
+    dampingFactor: 0.08,
+    rotateSpeed: 0.6,
+    zoomSpeed: 0.8,
+};
+
+const CAMERA_CONFIG = isMobile ? CAMERA_CONFIG_MOBILE : CAMERA_CONFIG_DESKTOP;
 
 // Fresnel-ring "eclipse" sphere. Position/size/color/ring thresholds all
 // live in the CONFIG object at the top of objects/spaceEclipseSphere.js —
@@ -207,34 +234,39 @@ const BUTTON_DESTINATIONS = {
     },
 };
 
-// Phone (portrait) framing — SidePanel now docks to the TOP HALF of the
-// screen on phones instead of a side strip (see ui/sidePanel.js), so the
-// visible slice of the scene is the BOTTOM HALF, a wide-short region
-// instead of a narrow-tall one. The desktop offsets above were tuned for
-// that narrow-tall visible area and will look off-center/zoomed wrong
-// here, so this is a separate set you tune independently — start from
-// these (copies of the desktop values) and nudge x/y/z and the rotation
-// in the device toolbar until each marker frames nicely in the bottom
-// half of the screen.
+// Phone (portrait) framing — SidePanel docks to either the TOP or
+// BOTTOM of the screen on phones instead of a side strip (see
+// ui/sidePanel.js), so the visible slice of the scene is whichever half
+// the panel ISN'T covering — a wide-short region instead of a
+// narrow-tall one, and on a different edge depending on `mobileDock`.
+// The desktop offsets above were tuned for the narrow-tall side-panel
+// visible area and will look off-center/zoomed wrong here, so this is a
+// separate set you tune independently — start from these (copies of the
+// desktop values) and nudge x/y/z and the rotation in the device
+// toolbar until each marker frames nicely in the visible half of the
+// screen for its dock edge.
 const BUTTON_DESTINATIONS_MOBILE = {
     profile: {
         markerName: 'Empty001',
         pageUrl: './pages/profile.html',
-        panelSide: 'right', // unused in the mobile top-docked layout
+        panelSide: 'right', // unused in the mobile docked layout
+        mobileDock: 'bottom', // panel docks to the bottom; scene shows in the top half
         offsetPosition: { x: -2.8, y: -1.4, z: -4.0 },
         offsetRotationDeg: { x: -90, y: 40, z: 0 },
     },
     project: {
         markerName: 'Empty002',
         pageUrl: './pages/project.html',
-        panelSide: 'left', // unused in the mobile top-docked layout
+        panelSide: 'left', // unused in the mobile docked layout
+        mobileDock: 'top', // panel docks to the top; scene shows in the bottom half
         offsetPosition: { x: -33, y: 2.2, z: 19.5 },
         offsetRotationDeg: { x: -90, y: -20, z: 0 },
     },
     contact: {
         markerName: 'Empty003',
         pageUrl: './pages/contact.html',
-        panelSide: 'right', // unused in the mobile top-docked layout
+        panelSide: 'right', // unused in the mobile docked layout
+        mobileDock: 'bottom', // panel docks to the bottom; scene shows in the top half
         offsetPosition: { x: 15, y: 0, z: 38 },
         offsetRotationDeg: { x: -95, y: -18, z: 0 },
     },
@@ -653,9 +685,9 @@ controls.update();
 
 // ================== CAMERA NAVIGATION + SIDE PANEL ==================
 const nav = new CameraNavigator(camera, controls);
-// SidePanel gets the isMobile flag so it knows to dock to the TOP HALF of
-// the screen (instead of the side) when running on a phone in portrait —
-// see the constructor JSDoc in ui/sidePanel.js.
+// SidePanel gets the isMobile flag so it knows to dock to the top or
+// bottom of the screen (instead of the side) when running on a phone in
+// portrait — see the constructor JSDoc in ui/sidePanel.js.
 const sidePanel = new SidePanel(isMobile);
 
 let cameraMarkers = {};
@@ -700,8 +732,9 @@ setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
     console.log('Button clicked:', buttonId);
 
     // Phones (portrait) use their own camera framing since the SidePanel
-    // docks to the top half of the screen there instead of a side strip —
-    // see BUTTON_DESTINATIONS_MOBILE above.
+    // docks to the top or bottom of the screen there (per-destination via
+    // mobileDock) instead of a side strip — see BUTTON_DESTINATIONS_MOBILE
+    // above.
     const destinations = isMobile ? BUTTON_DESTINATIONS_MOBILE : BUTTON_DESTINATIONS;
     const destination = destinations[buttonId];
     if (!destination) {
@@ -734,7 +767,7 @@ setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
     targetQuat.multiply(new THREE.Quaternion().setFromEuler(extraRotation));
 
     nav.flyToQuat(targetPos, targetQuat, 1.4, () => {
-        sidePanel.show(destination.pageUrl, destination.panelSide);
+        sidePanel.show(destination.pageUrl, destination.panelSide, destination.mobileDock);
     });
 });
 
