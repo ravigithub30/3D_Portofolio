@@ -14,82 +14,70 @@
         canvas {
             display: block;
         }
+
+        /* ============ MESSAGE BUBBLE ============ */
+        .message-bubble {
+            position: fixed;
+            /* Default fallback position — actually overridden per-button
+               by showMessageBubble() via inline style, using
+               BUBBLE_POSITIONS below. */
+            left: 12vw;
+            top: 22vh;
+
+            max-width: 240px;
+            background: rgba(20, 32, 60, 0.55);
+            backdrop-filter: blur(6px);
+            border: 1px solid rgba(47, 186, 255, 0.6);
+            border-radius: 14px;
+            padding: 12px 16px;
+            color: #e8f2ff;
+            font-family: "Science Gothic", sans-serif;
+            font-size: 13.5px;
+            line-height: 1.4;
+            box-shadow: 0 0 20px rgba(47, 186, 255, 0.25);
+            z-index: 20;
+
+            transform: scale(0.85) translateY(12px);
+            opacity: 0;
+            pointer-events: none;
+            transition: transform 0.35s ease, opacity 0.35s ease, left 0.35s ease, top 0.35s ease;
+        }
+
+        .message-bubble.visible {
+            transform: scale(1) translateY(0);
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* little speech-bubble tail pointing down toward the character */
+        .message-bubble::after {
+            content: "";
+            position: absolute;
+            bottom: -8px;
+            left: 30px;
+            width: 14px;
+            height: 14px;
+            background: rgba(20, 32, 60, 0.55);
+            border-right: 1px solid rgba(47, 186, 255, 0.6);
+            border-bottom: 1px solid rgba(47, 186, 255, 0.6);
+            transform: rotate(45deg);
+        }
+
+        .message-bubble-close {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            background: none;
+            border: none;
+            color: #9fb3d1;
+            font-size: 12px;
+            cursor: pointer;
+        }
     </style>
 </head>
 
 <body>
 
-<!--
-  CHANGED (real lensing): objects/spaceBlackHole.js was swapped back to a
-  genuine ray-marched gravitational lensing Pass (raw-GLSL ShaderMaterial
-  run through EffectComposer/Pass) — the previous "fake/static-look"
-  version had a disabled no-op stub as its lensPass, so depth occlusion
-  and background lensing were wired up here but silently doing nothing.
-
-  CHANGED (depth pre-pass): the depth pre-pass render target
-  (depthRenderTarget) was being created and resized, but nothing ever
-  actually rendered the scene into it — its depth texture was empty every
-  frame. The animate() loop now renders the scene into depthRenderTarget
-  right before the main composer pass, so the black hole's lensing pass
-  can correctly tell when real scene geometry occludes it.
-
-  CHANGED (shadows): renderer.shadowMap enabled, dirLight configured to
-  cast shadows with a shadow camera sized to where the station/satellite/
-  rocks actually sit, and every async object loader's promise is now
-  collected so we can wait for all of them to finish before walking the
-  scene graph and turning on castShadow/receiveShadow on every mesh in one
-  pass. Note: shadows only *receive* correctly on materials that support
-  shadow-map sampling (MeshStandardMaterial, MeshPhysicalMaterial, etc.) —
-  any mesh still using a raw custom ShaderMaterial will cast a shadow fine
-  but won't show shadows landing on it.
-
-  CHANGED (accretion disk): diskModel is now declared at top-level scope
-  and assigned inside the addSpaceFakeBlackHoleDisk().then() callback, so
-  animate() can reach it. The update call is optional-chained since the
-  .glb loads asynchronously and diskModel is null for the first several
-  frames. Also removed the duplicate renderer.render(scene, camera) call
-  that was running every frame right before composer.render() — the
-  composer's own RenderPass already renders the scene, so the standalone
-  call was pure wasted work.
-
-  CHANGED (eclipse sphere): the flat billboard-circle sphere
-  (addSpaceBillboardSphere) was swapped for addSpaceEclipseSphere — a
-  fresnel-based glowing rim shader (black disc, thresholded orange ring
-  at the grazing edge) matching the reference Blender fresnel/ColorRamp
-  node setup. It's a pure ShaderMaterial with no per-frame update needed
-  (the fresnel term is computed from view-space normals every pixel), so
-  the billboardSphere.update(camera) call in animate() was removed too.
-
-  CHANGED (mobile portrait perf): the resize handler was previously
-  unconditional — every time window.innerWidth/innerHeight changed it
-  called renderer.setSize / composer.setSize / depthRenderTarget.setSize,
-  each of which destroys and reallocates GPU render targets. On mobile,
-  dragging to orbit the camera in portrait mode causes the browser's
-  address bar to repeatedly collapse/expand, firing `resize` many times a
-  second and thrashing GPU allocations — this was the source of the
-  portrait-only lag (landscape barely triggers it since the address bar
-  is a much smaller fraction of the viewport there). Fixes:
-    1. touch-action: none (css) + a non-passive touchmove preventDefault
-       stop the page/chrome from reacting to the drag gesture at all.
-    2. The resize handler is now debounced and filters out small height-
-       only deltas (<120px, i.e. just the toolbar toggling) so real
-       rotations/foldable-device changes still resize correctly but
-       address-bar noise does not.
-    3. Mobile devices get a capped pixel ratio and a smaller shadow map /
-       no point-light shadow, since portrait phones are usually also the
-       lowest-powered GPUs hitting this scene.
-
-  CHANGED (mobile side panel -> docked panel): ui/sidePanel.js now takes
-  the isMobile flag and, on phones in portrait, docks the panel to
-  either the TOP or BOTTOM of the screen (per-destination, via
-  `mobileDock` in BUTTON_DESTINATIONS_MOBILE below) instead of a
-  60%-wide side strip, taking up ~65% of the screen height and leaving
-  the rest showing the live 3D scene. See the SidePanel constructor
-  JSDoc for details. Camera framing for that layout is tuned separately
-  in BUTTON_DESTINATIONS_MOBILE, and the initial camera position/target/
-  zoom limits are tuned separately in CAMERA_CONFIG_MOBILE, since both
-  need different values than the desktop side-panel layout.
--->
 <script type="importmap">
   {
     "imports": {
@@ -111,7 +99,6 @@ import { UnrealBloomPass } from 'https://unpkg.com/three@latest/examples/jsm/pos
 import { OutputPass } from 'https://unpkg.com/three@latest/examples/jsm/postprocessing/OutputPass.js';
 import { RGBELoader } from 'https://unpkg.com/three@latest/examples/jsm/loaders/RGBELoader.js';
 // ---- your own modular files ----
-// import { addSpaceStation } from './objects/spaceStation.js';
 import { addSpaceEngine } from './objects/spaceEngine.js';
 import { addSpacePlatform } from './objects/spacePlatform.js';
 import { addSpaceFood } from './objects/spaceFood.js';
@@ -133,22 +120,10 @@ import { addSpaceMetalgrey } from './objects/spaceMetalgrey.js';
 import { addSpaceFakeBlackHoleDisk } from './objects/spaceFakeBHA.js';
 import { addSpaceEclipseSphere } from './objects/spaceEclipseSphere.js';
 
-// the real gravitational-lensing black hole
-// import { addSpaceBlackHole } from './objects/spaceBlackHole.js';
-
-// import { addSpaceExtra1 } from './objects/spaceExtra1.js';
-// import { addSpaceExtra2 } from './objects/spaceExtra2.js';
-
 // ui.buttons
 import { setupInteractiveButtons } from './ui/interactiveButtons.js';
 import { loadCameraMarkers } from './objects/cameraMarkers.js';
 import { CameraNavigator } from './ui/cameraNavigator.js';
-// NOTE: the ?v=2 query string is a cache-buster. Browsers (and GitHub
-// Pages' CDN) key their cache of ES module files by the exact URL —
-// without this, editing ui/sidePanel.js and re-deploying can keep
-// serving the old cached copy indefinitely even after a hard refresh.
-// Bump this number any time you edit sidePanel.js and want to be 100%
-// sure the new version is what actually loads.
 import { SidePanel } from './ui/sidePanel.js?v=3';
 
 // ================== MOBILE DETECTION ==================
@@ -158,7 +133,6 @@ const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 const scene = new THREE.Scene();
 
 // ================== CAMERA / CONTROLS CONFIG ==================
-// Desktop/tablet/landscape-phone framing.
 const CAMERA_CONFIG_DESKTOP = {
     startPosition: { x: -10, y: 5, z: 10 },
     target: { x: 0, y: 3.5, z: 0 },
@@ -174,12 +148,6 @@ const CAMERA_CONFIG_DESKTOP = {
     zoomSpeed: 0.8,
 };
 
-// Phone framing — separate from desktop so you can dial in different
-// start position/target, zoom limits (minDistance/maxDistance), and
-// rotation limits (min/maxPolarAngle, min/maxAzimuthAngle) for the
-// smaller portrait viewport without touching the desktop values above.
-// Starts as a copy of the desktop config — tune the numbers below in the
-// device toolbar until it frames the way you want on phones.
 const CAMERA_CONFIG_MOBILE = {
     startPosition: { x: -5, y: 5, z: 5 },
     target: { x: 0, y: 3.5, z: 0 },
@@ -197,19 +165,11 @@ const CAMERA_CONFIG_MOBILE = {
 
 const CAMERA_CONFIG = isMobile ? CAMERA_CONFIG_MOBILE : CAMERA_CONFIG_DESKTOP;
 
-// Fresnel-ring "eclipse" sphere. Position/size/color/ring thresholds all
-// live in the CONFIG object at the top of objects/spaceEclipseSphere.js —
-// or call eclipseSphere.setPosition(x, y, z) at runtime to move it, e.g.
-// from a GUI slider or the CameraNavigator later.
 const eclipseSphere = addSpaceEclipseSphere(scene);
-// eclipseSphere.setPosition(0, 3.5, 0);
-
 
 // ================================================================
 // ================== TWEAK CAMERA DESTINATIONS HERE ==============
 // ================================================================
-// Desktop / tablet / landscape-phone framing — the side panel takes 60%
-// width on one edge, leaving the rest of the screen as scene.
 const BUTTON_DESTINATIONS = {
     profile: {
         markerName: 'Empty001',
@@ -234,39 +194,28 @@ const BUTTON_DESTINATIONS = {
     },
 };
 
-// Phone (portrait) framing — SidePanel docks to either the TOP or
-// BOTTOM of the screen on phones instead of a side strip (see
-// ui/sidePanel.js), so the visible slice of the scene is whichever half
-// the panel ISN'T covering — a wide-short region instead of a
-// narrow-tall one, and on a different edge depending on `mobileDock`.
-// The desktop offsets above were tuned for the narrow-tall side-panel
-// visible area and will look off-center/zoomed wrong here, so this is a
-// separate set you tune independently — start from these (copies of the
-// desktop values) and nudge x/y/z and the rotation in the device
-// toolbar until each marker frames nicely in the visible half of the
-// screen for its dock edge.
 const BUTTON_DESTINATIONS_MOBILE = {
     profile: {
         markerName: 'Empty001',
         pageUrl: './pages/profile.html',
-        panelSide: 'right', // unused in the mobile docked layout
-        mobileDock: 'bottom', // panel docks to the bottom; scene shows in the top half
+        panelSide: 'right',
+        mobileDock: 'bottom',
         offsetPosition: { x: -2.8, y: -1.4, z: -4.4 },
         offsetRotationDeg: { x: -150, y: 40, z: 55 },
     },
     project: {
         markerName: 'Empty002',
         pageUrl: './pages/project.html',
-        panelSide: 'left', // unused in the mobile docked layout
-        mobileDock: 'top', // panel docks to the top; scene shows in the bottom half
+        panelSide: 'left',
+        mobileDock: 'top',
         offsetPosition: { x: -32, y: 3.7, z: 19 },
         offsetRotationDeg: { x: -60, y: -60, z: 30 },
     },
     contact: {
         markerName: 'Empty003',
         pageUrl: './pages/contact.html',
-        panelSide: 'right', // unused in the mobile docked layout
-        mobileDock: 'bottom', // panel docks to the bottom; scene shows in the top half
+        panelSide: 'right',
+        mobileDock: 'bottom',
         offsetPosition: { x: 19, y: -3.9, z: 39 },
         offsetRotationDeg: { x: -130, y:0, z: 0 },
     },
@@ -282,32 +231,18 @@ camera.position.set(
 );
 
 // ================== RENDERER ==================
-// AA is genuinely expensive on mobile GPUs (it's effectively supersampling
-// on tile-based renderers) — skip it entirely on mobile and rely on the
-// OutputPass + a capped pixel ratio to keep edges reasonable.
 const renderer = new THREE.WebGLRenderer({ antialias: !isMobile, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
-
-// DPR is the single biggest lever on mobile: DPR 3 (common on modern
-// phones) means 9x the fragment-shader work of DPR 1. Force it down hard.
 renderer.setPixelRatio(isMobile ? 1 : Math.min(window.devicePixelRatio, 2));
 
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.2;
 
-// Shadows on for all devices — portrait lag turned out to be the missing
-// viewport meta tag + fixed-vFov framing issue, not shadow cost.
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 document.body.appendChild(renderer.domElement);
-
-// NOTE: touch-action: none in the CSS above already stops the browser
-// from treating drags on the canvas as page gestures. We previously also
-// added JS preventDefault() on touchstart/touchmove here, but that
-// suppresses the browser's synthetic click event entirely — which is
-// what broke tap-to-click on the interactive buttons. Removed.
 
 // ================== LIGHTS ==================
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
@@ -316,11 +251,6 @@ scene.add(ambientLight);
 const dirLight = new THREE.DirectionalLight(0xFFE9BA, 3.5);
 dirLight.position.set(-10, 15, -20);
 
-
-// Shadow camera sized around where the station/satellite/rock field
-// actually sit (roughly the origin, tens of units across) — the black
-// hole itself is way out at z:-500 and doesn't need to be inside this box.
-// dirLight.castShadow is now on for all devices.
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.set(712, 712);
 dirLight.shadow.camera.near = 1;
@@ -333,61 +263,30 @@ dirLight.shadow.bias = -0.0015;
 
 scene.add(dirLight);
 
-
-// A single light with a plain, tweakable radius. Change `pointLightRadius`
-// to any number, any time, to change how far this light reaches before
-// fading to zero. Nothing else is attached to this — no scene scanning,
-// no material changes, no auto-detection of anything.
 let pointLightRadius = 6;
 const pointLight = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius);
-pointLight.position.set(-1.85, 1.7, -2); // <-- move this to wherever you want the light
+pointLight.position.set(-1.85, 1.7, -2);
 
-// Point light shadow on for all devices now.
 pointLight.castShadow = true;
 pointLight.shadow.mapSize.set(1024, 1024);
 pointLight.shadow.bias = -0.002;
-
 
 scene.add(pointLight);
 
 let pointLightRadius1 = 6;
 const pointLight1 = new THREE.PointLight(0xBAEFFF, 4, pointLightRadius1);
-pointLight1.position.set(3.7, -0.5, 6.0); // <-- move this to wherever you want the light
-
-// pointLight1.castShadow = true;
-// pointLight1.shadow.mapSize.set(1024, 1024);
-// pointLight1.shadow.bias = -0.002;
-
+pointLight1.position.set(3.7, -0.5, 6.0);
 
 scene.add(pointLight1);
 
-// To change the radius at any point after this (e.g. from a slider, dev
-// tools console, or just editing the number above and reloading):
-//   pointLightRadius = 10;
-//   pointLight.distance = pointLightRadius;
-
 // ================== DEPTH PRE-PASS TARGET ==================
-// A dedicated render target whose depth buffer is exposed as a texture, so
-// the black hole's lensing pass can compare "how far is the real geometry
-// at this pixel" against "how far is the black hole at this pixel" and
-// correctly hide the lensing effect behind solid objects. This target is
-// actually rendered into every frame down in animate() below.
 const depthRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
 depthRenderTarget.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
 depthRenderTarget.depthTexture.type = THREE.UnsignedIntType;
 
 // ================== RESPONSIVE CAMERA FOV ==================
-// camera.fov is a VERTICAL fov. With it fixed at 75° for every aspect
-// ratio, portrait mode (aspect < 1) ends up with a much narrower
-// HORIZONTAL fov than landscape — you see a cramped sideways slice of
-// the scene instead of a comparably framed view. This locks the
-// horizontal fov to what it would be at a normal landscape aspect, and
-// backs out the vertical fov needed to preserve it at the current aspect
-// (the same technique cinema/game cameras use for "Fill" vs "Vert-" FOV
-// scaling). On portrait this widens the vertical fov to compensate, so
-// framing feels consistent instead of zoomed-in.
-const BASE_VERTICAL_FOV_DEG = 75;     // the fov everything else was tuned around
-const BASE_REFERENCE_ASPECT = 16 / 9; // treat this as "normal" landscape framing
+const BASE_VERTICAL_FOV_DEG = 75;
+const BASE_REFERENCE_ASPECT = 16 / 9;
 
 function updateResponsiveCameraFov() {
     const aspect = camera.aspect;
@@ -398,21 +297,14 @@ function updateResponsiveCameraFov() {
     camera.updateProjectionMatrix();
 }
 
-// On narrow (portrait-ish) aspects, also dolly the camera back slightly
-// along its current view direction from the orbit target so the wider
-// vertical fov doesn't make objects loom too close. Proportional so it
-// fades in smoothly rather than snapping, and capped so it can't fly off.
 function updateCameraDistanceForAspect() {
     const aspect = camera.aspect;
-    if (aspect >= 1) return; // landscape/square: no adjustment needed
+    if (aspect >= 1) return;
 
     const pullBackFactor = THREE.MathUtils.clamp(1 / aspect, 1, 1.6);
     const target = controls.target;
     const dir = new THREE.Vector3().subVectors(camera.position, target);
 
-    // Only rescale relative to the camera's ORIGINAL configured distance,
-    // not whatever the user has already zoomed/panned to — otherwise this
-    // would fight the user's own zoom on every resize.
     if (!updateCameraDistanceForAspect.baseDistance) {
         updateCameraDistanceForAspect.baseDistance = dir.length();
     }
@@ -421,12 +313,6 @@ function updateCameraDistanceForAspect() {
 }
 
 // ================== RESIZE (debounced, chrome-toggle-aware) ==================
-// Mobile browsers collapse/expand their address bar as you scroll or
-// drag, which changes window.innerHeight without the user actually
-// rotating their device. Reacting to every one of those with a full
-// renderer/composer/render-target resize (each of which reallocates GPU
-// textures) is what caused the portrait-only lag. We debounce the event
-// and ignore height-only deltas smaller than a typical toolbar height.
 let lastWidth = window.innerWidth;
 let lastHeight = window.innerHeight;
 let resizeTimeout = null;
@@ -436,9 +322,8 @@ function applyResize() {
     const h = window.innerHeight;
 
     const widthChanged = Math.abs(w - lastWidth) > 2;
-    const heightChangedALot = Math.abs(h - lastHeight) > 120; // > typical mobile toolbar height
+    const heightChangedALot = Math.abs(h - lastHeight) > 120;
 
-    // Ignore small height-only changes — that's just the address bar.
     if (!widthChanged && !heightChangedALot) return;
 
     lastWidth = w;
@@ -451,8 +336,6 @@ function applyResize() {
     composer.setSize(w, h);
     depthRenderTarget.setSize(w, h);
 
-    // composer.setSize() resets every pass to full resolution, so redo the
-    // mobile bloom downscale afterward.
     bloomPass.setSize(w * bloomResScale, h * bloomResScale);
 }
 
@@ -461,33 +344,10 @@ window.addEventListener('resize', () => {
     resizeTimeout = setTimeout(applyResize, 150);
 });
 
-// Real orientation changes (portrait <-> landscape) should still resize
-// immediately rather than waiting out the debounce.
 window.addEventListener('orientationchange', () => {
     clearTimeout(resizeTimeout);
-    setTimeout(applyResize, 200); // slight delay lets innerWidth/Height settle post-rotation
+    setTimeout(applyResize, 200);
 });
-
-
-// The real ray-marched black hole. Every parameter — position, size, disk
-// inner/outer radius, spin, colors, lensing strength, ray-march quality —
-// is in the CONFIG object at the top of objects/spaceBlackHole.js, or
-// override any of it here:
-// const blackHole = addSpaceBlackHole(scene, camera, {
-//     position: { x: -40, y: -50, z: -500 },
-//     radius: 30,
-//     spinSpeed: -0.15,
-//     colors: {
-//         inner: '#ff8c1a',
-//         mid: '#e6420a',
-//         outer: '#7a1200',
-//     },
-// });
-
-// // Wire up depth occlusion — without this, the lensing pass has no idea
-// // what's in front of it and will render straight through solid objects.
-// blackHole.lensPass.setDepthTexture(depthRenderTarget.depthTexture);
-
 
 // ================== HDRI ==================
 const rgbeLoader = new RGBELoader();
@@ -496,34 +356,18 @@ const pmremGenerator = new THREE.PMREMGenerator(renderer);
 rgbeLoader.load('./hdri/outer-space-8k_2K_ae1d0eba-b64e-4c2a-ae9b-23b7b45f7026.hdr', (texture) => {
     const envMap = pmremGenerator.fromEquirectangular(texture).texture;
 
-    // ✅ ONLY background (visual)
     scene.background = envMap;
-
-    // ❌ REMOVE lighting influence
     scene.environment = null;
+    scene.backgroundIntensity = 2.8;
 
-    // 🔥 control ONLY HDRI brightness
-    scene.backgroundIntensity = 2.8; // tweak this
-
-    // Give the black hole shader the RAW equirectangular texture (not the
-    // prefiltered PMREM version above) so it can sample real stars in the
-    // correctly bent escape direction of each photon, instead of a flat
-    // undistorted patch. We deliberately do NOT dispose this texture —
-    // the lensing shader samples it every frame.
     texture.mapping = THREE.EquirectangularReflectionMapping;
-    // blackHole.lensPass.setBackgroundTexture(texture);
 
     pmremGenerator.dispose();
 });
 
 // ================== OBJECTS ==================
-// diskModel is declared at top-level scope (not inside the .then() below)
-// so both the load callback AND animate() can see the same variable.
 let diskModel = null;
 
-// Every async loader's promise is captured (instead of fire-and-forget)
-// so we can wait for all of them below and then walk the finished scene
-// graph exactly once to enable shadows on every mesh.
 const objectLoadPromises = [
     addSpaceEngine(scene).catch((err) => console.error('spaceEngine did not load:', err)),
     addSpacePlatform(scene).catch((err) => console.error('spacePlatform did not load:', err)),
@@ -543,13 +387,9 @@ const objectLoadPromises = [
     addSpaceMetalgrey(scene).catch((err) => console.error('addSpaceMetalgrey did not load:', err)),
     addSpaceFakeBlackHoleDisk(scene)
   .then((model) => {
-    // 2. This runs ONLY after the .glb file is fully loaded
-    model.position.set(-40, -50, -500);   // Change position  x: -40, y: -50, z: -500
-    model.scale.setScalar(170.2);       // Override the default size if needed
-
-    // Assign to the top-level variable so animate() can reach it.
+    model.position.set(-40, -50, -500);
+    model.scale.setScalar(170.2);
     diskModel = model;
-
     console.log("Black hole disk positioned successfully!");
   })
   .catch((error) => {
@@ -557,8 +397,6 @@ const objectLoadPromises = [
   }),
 
 ];
-
-
 
 let spaceRotatingText;
 objectLoadPromises.push(
@@ -568,12 +406,6 @@ objectLoadPromises.push(
     })
 );
 
-// Once every loader above has settled, walk the whole scene graph and
-// turn on shadow casting/receiving for every mesh in a single pass.
-// Note: receiveShadow only has a visible effect on materials that support
-// shadow-map sampling (MeshStandardMaterial, MeshPhysicalMaterial, etc.).
-// Any mesh still on a raw custom ShaderMaterial will cast fine but won't
-// show shadows landing on it.
 Promise.all(objectLoadPromises).then(() => {
     let meshCount = 0;
     const materialTypeCounts = {};
@@ -585,17 +417,12 @@ Promise.all(objectLoadPromises).then(() => {
         obj.castShadow = true;
         obj.receiveShadow = true;
 
-        // A mesh can have one material or an array of materials
-        // (multi-material geometry) — check every slot.
         const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
         mats.forEach((mat) => {
             if (!mat) return;
             const type = mat.type;
             materialTypeCounts[type] = (materialTypeCounts[type] || 0) + 1;
 
-            // These material types have no built-in shadow-map sampling
-            // in their shader, so receiveShadow will silently do nothing
-            // even though the flag is set to true.
             const supportsReceivingShadows = [
                 'MeshStandardMaterial',
                 'MeshPhysicalMaterial',
@@ -614,17 +441,12 @@ Promise.all(objectLoadPromises).then(() => {
     console.log('Material types in scene:', materialTypeCounts);
     if (unsupportedMeshes.length > 0) {
         console.warn(
-            `${unsupportedMeshes.length} mesh(es) use a material that CANNOT receive shadows ` +
-            `(ShaderMaterial, MeshBasicMaterial, etc. have no shadow-map sampling code). ` +
-            `These will still cast shadows onto other objects, but nothing will ever shadow onto them:`,
+            `${unsupportedMeshes.length} mesh(es) use a material that CANNOT receive shadows.`,
             unsupportedMeshes
         );
     }
 });
 
-// DEBUG: visualize the directional light's shadow frustum as a wireframe
-// box in the scene, so we can confirm it actually encloses the station
-// instead of missing it entirely. Press "H" to toggle it on/off.
 const shadowCameraHelper = new THREE.CameraHelper(dirLight.shadow.camera);
 shadowCameraHelper.visible = false;
 scene.add(shadowCameraHelper);
@@ -636,19 +458,12 @@ window.addEventListener('keydown', (e) => {
 });
 
 // ================== POST-PROCESSING ==================
-// Classic EffectComposer. The black hole's lensing pass sits between the
-// base render and bloom.
 const composer = new EffectComposer(renderer);
 composer.addPass(new RenderPass(scene, camera));
-// composer.addPass(blackHole.lensPass);
-// UnrealBloomPass runs a whole downsample/blur/upsample chain at the
-// resolution you pass it, every frame. On mobile we render that chain at
-// roughly half resolution — bloom is a soft glow effect so the quality
-// loss is barely visible, but the cost drops by ~4x.
-const bloomResScale = 1; // full resolution on all devices now
+const bloomResScale = 1;
 const bloomPass = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth * bloomResScale, window.innerHeight * bloomResScale),
-    0.15, 0.5, 0.15  // strength, radius, threshold — same values as before
+    0.15, 0.5, 0.15
 );
 composer.addPass(bloomPass);
 composer.addPass(new OutputPass());
@@ -676,18 +491,12 @@ controls.zoomSpeed = CAMERA_CONFIG.zoomSpeed;
 
 controls.update();
 
-// Apply once on load in case the page opens directly in portrait —
-// otherwise the fov/distance correction would only kick in after the
-// first resize/orientation event.
 updateResponsiveCameraFov();
 updateCameraDistanceForAspect();
 controls.update();
 
 // ================== CAMERA NAVIGATION + SIDE PANEL ==================
 const nav = new CameraNavigator(camera, controls);
-// SidePanel gets the isMobile flag so it knows to dock to the top or
-// bottom of the screen (instead of the side) when running on a phone in
-// portrait — see the constructor JSDoc in ui/sidePanel.js.
 const sidePanel = new SidePanel(isMobile);
 
 let cameraMarkers = {};
@@ -701,8 +510,12 @@ Promise.all([
     console.log('Camera markers ready:', Object.keys(cameraMarkers));
 });
 
+// IMPORTANT FIX: this now ALSO hides the message bubble. Previously this
+// handler never touched the bubble, so closing a panel (profile/project/
+// contact) left the message sitting on screen forever.
 sidePanel.onClose(() => {
     nav.flyBack(1.4, () => nav.enableControls());
+    hideMessageBubble();
 });
 
 const rockField = addSpaceRockField(scene, {
@@ -716,8 +529,6 @@ const rockField = addSpaceRockField(scene, {
     speedMax: 5.8,
 });
 
-// The rock field is added synchronously (not part of objectLoadPromises
-// above), so its shadow flags are set here, right after creation.
 rockField.group.traverse((obj) => {
     if (obj.isMesh) {
         obj.castShadow = true;
@@ -727,14 +538,28 @@ rockField.group.traverse((obj) => {
 
 console.log('Rock field children:', rockField.group.children.length);
 
+// ================== MESSAGE BUBBLE CONTENT + PLACEMENT ==================
+// One message per button — edit the text for each tab here.
+const BUBBLE_MESSAGES = {
+    profile: "Anything other than getting a job! 😐",
+    project: "Still in progress, had a phd in procrastination 🏃‍♂️🏃‍♂️",
+    contact: "I see absolute darkness, quite similar to my future BTW 🙃",
+};
+
+// One screen position per button (vw/vh so it scales with the window).
+// Since each button always flies the camera to the SAME fixed offset
+// (see BUTTON_DESTINATIONS), these positions stay visually correct every
+// time that tab opens. Tune each pair by eye once you can see all three.
+const BUBBLE_POSITIONS = {
+    profile: { left: '19vw', top: '12vh' },  // character visible on the left, panel on the right
+    project: { left: '75vw', top: '18vh' },  // panel on the left, scene visible on the right
+    contact: { left: '23vw', top: '58vh' },  // panel on the right, lower-left area free
+};
+
 // ================== INTERACTIVE BUTTONS (single source of truth) ==================
 setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
     console.log('Button clicked:', buttonId);
 
-    // Phones (portrait) use their own camera framing since the SidePanel
-    // docks to the top or bottom of the screen there (per-destination via
-    // mobileDock) instead of a side strip — see BUTTON_DESTINATIONS_MOBILE
-    // above.
     const destinations = isMobile ? BUTTON_DESTINATIONS_MOBILE : BUTTON_DESTINATIONS;
     const destination = destinations[buttonId];
     if (!destination) {
@@ -768,11 +593,42 @@ setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
 
     nav.flyToQuat(targetPos, targetQuat, 1.4, () => {
         sidePanel.show(destination.pageUrl, destination.panelSide, destination.mobileDock);
+
+        const message = BUBBLE_MESSAGES[buttonId];
+        const position = BUBBLE_POSITIONS[buttonId];
+        if (message) {
+            showMessageBubble(message, position);
+        } else {
+            hideMessageBubble();
+        }
     });
 });
 
 
+// ================== MESSAGE BUBBLE (greeting near the character) ==================
+function showMessageBubble(text, position) {
+    const bubble = document.getElementById('messageBubble');
+    if (!bubble) return;
 
+    if (text) {
+        const textEl = document.getElementById('messageBubbleText');
+        if (textEl) textEl.textContent = text;
+    }
+
+    if (position) {
+        bubble.style.left = position.left;
+        bubble.style.top = position.top;
+    }
+
+    bubble.classList.add('visible');
+}
+
+function hideMessageBubble() {
+    const bubble = document.getElementById('messageBubble');
+    if (bubble) bubble.classList.remove('visible');
+}
+
+document.getElementById('messageBubbleClose')?.addEventListener('click', hideMessageBubble);
 
 
 // ================== LOOP ==================
@@ -792,33 +648,19 @@ function animate() {
     rockField.update(delta);
 
     const elapsed = clock.getElapsedTime();
-    // Optional-chained: diskModel is null until the .glb finishes loading,
-    // and userData.updateAccretionDisk only exists once addSpaceFakeBlackHoleDisk
-    // has set it on the loaded model.
     diskModel?.userData.updateAccretionDisk?.(elapsed);
 
-    // drive the black hole's disk spin + lensing update
-    // blackHole.update(delta, camera);
-
-    // // CHANGED: depth pre-pass. Render the real scene geometry into
-    // // depthRenderTarget so its depth texture is fresh this frame — this is
-    // // what blackHole.lensPass reads to know when solid objects (station
-    // // hull, rocks, etc.) are nearer to the camera than the black hole
-    // // itself, so the lensing effect gets correctly hidden behind them
-    // // instead of drawing through solid geometry.
-    // renderer.setRenderTarget(depthRenderTarget);
-    // renderer.render(scene, camera);
-    // renderer.setRenderTarget(null);
-
-    // NOTE: the standalone renderer.render(scene, camera) call that used to
-    // run here was removed — composer.render() below already renders the
-    // scene via its own RenderPass, so the old call was rendering it twice
-    // per frame for no visible benefit.
     composer.render();
 }
 animate();
 
 </script>
+
+<!-- ============ MESSAGE BUBBLE (markup) ============ -->
+<div id="messageBubble" class="message-bubble">
+  
+  <p id="messageBubbleText">Hey, I'm Ravi 👋</p>
+</div>
 
 </body>
 </html>
