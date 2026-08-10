@@ -556,6 +556,11 @@ const BUBBLE_POSITIONS = {
     contact: { left: '23vw', top: '58vh' },  // panel on the right, lower-left area free
 };
 
+const BUBBLE_POSITIONS_MOBILE = {
+    profile: { left: '10vw', top: '12vh' },
+    project: { left: '40vw', top: '65vh' },
+    contact: { left: '15vw', top: '18vh' },
+};
 // ================== INTERACTIVE BUTTONS (single source of truth) ==================
 setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
     console.log('Button clicked:', buttonId);
@@ -595,13 +600,14 @@ setupInteractiveButtons(scene, camera, renderer, (buttonId) => {
         sidePanel.show(destination.pageUrl, destination.panelSide, destination.mobileDock);
 
         const message = BUBBLE_MESSAGES[buttonId];
-        const position = BUBBLE_POSITIONS[buttonId];
+        const position = (isMobile ? BUBBLE_POSITIONS_MOBILE : BUBBLE_POSITIONS)[buttonId];
         if (message) {
             showMessageBubble(message, position);
         } else {
             hideMessageBubble();
         }
     });
+
 });
 
 
