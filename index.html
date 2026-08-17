@@ -108,6 +108,8 @@ import { addSpaceEmision2 } from './objects/spaceEmision2.js';
 import { addSpaceSatelite } from './objects/spaceSatelite.js';
 import { addSpaceBoard } from './objects/spaceBoard.js';
 import { addSpaceText1 } from './objects/spaceText1.js';
+import { addSpaceText2 } from './objects/spaceText2.js';
+import { addSpaceText3 } from './objects/spaceText3.js';
 import { addSpaceRotatingText } from './objects/spaceRotatingText.js';
 import { addSpaceRockField } from './objects/spaceRockField.js';
 import { addSpaceManshirt } from './objects/spaceManshirt.js';
@@ -116,6 +118,7 @@ import { addSpaceManskin } from './objects/spaceManskin.js';
 import { addSpaceManhair } from './objects/spaceManhair.js';
 import { addSpaceMantshirt } from './objects/spaceMantshirt.js';
 import { addSpaceExtra } from './objects/spaceExtra.js';
+import { addSpaceExtra3 } from './objects/spaceExtra3.js';
 import { addSpaceMetalgrey } from './objects/spaceMetalgrey.js';
 import { addSpaceFakeBlackHoleDisk } from './objects/spaceFakeBHA.js';
 import { addSpaceEclipseSphere } from './objects/spaceEclipseSphere.js';
@@ -279,6 +282,26 @@ pointLight1.position.set(3.7, -0.5, 6.0);
 
 scene.add(pointLight1);
 
+let pointLightRadius2 = 6;
+const pointLight2 = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius2);
+pointLight2.position.set(2.3,1.5,-2);
+
+pointLight2.castShadow = true;
+pointLight2.shadow.mapSize.set(128,128);
+pointLight2.shadow.bias = -0.002;
+
+scene.add(pointLight2);
+
+let pointLightRadius3 = 6;
+const pointLight3 = new THREE.PointLight(0xBAEFFF, 4.5, pointLightRadius3);
+pointLight3.position.set(2.3,1.5,-3);
+
+pointLight3.castShadow = true;
+pointLight3.shadow.mapSize.set(128,128);
+pointLight3.shadow.bias = -0.002;
+
+scene.add(pointLight3);
+
 // ================== DEPTH PRE-PASS TARGET ==================
 const depthRenderTarget = new THREE.WebGLRenderTarget(window.innerWidth, window.innerHeight);
 depthRenderTarget.depthTexture = new THREE.DepthTexture(window.innerWidth, window.innerHeight);
@@ -378,12 +401,15 @@ const objectLoadPromises = [
     addSpaceSatelite(scene).catch((err) => console.error('spaceSatelite did not load:', err)),
     addSpaceBoard(scene).catch((err) => console.error('spaceBoard did not load:', err)),
     addSpaceText1(scene).catch((err) => console.error('spaceText1 did not load:', err)),
+    addSpaceText2(scene).catch((err) => console.error('spaceText2 did not load:', err)),
+    addSpaceText3(scene).catch((err) => console.error('spaceText2 did not load:', err)),
     addSpaceManshirt(scene).catch((err) => console.error('addSpaceManshirt did not load:', err)),
     addSpaceManpant(scene).catch((err) => console.error('addSpaceManpant did not load:', err)),
     addSpaceManskin(scene).catch((err) => console.error('addSpaceManskin did not load:', err)),
     addSpaceManhair(scene).catch((err) => console.error('addSpaceManhair did not load:', err)),
     addSpaceMantshirt(scene).catch((err) => console.error('addSpaceMantshirt did not load:', err)),
     addSpaceExtra(scene).catch((err) => console.error('addSpaceExtra did not load:', err)),
+    addSpaceExtra3(scene).catch((err) => console.error('addSpaceExtra3 did not load:', err)),
     addSpaceMetalgrey(scene).catch((err) => console.error('addSpaceMetalgrey did not load:', err)),
     addSpaceFakeBlackHoleDisk(scene)
   .then((model) => {
