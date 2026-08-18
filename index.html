@@ -391,6 +391,68 @@ rgbeLoader.load('./hdri/outer-space-8k_2K_ae1d0eba-b64e-4c2a-ae9b-23b7b45f7026.h
     pmremGenerator.dispose();
 });
 
+//================ VIDEOS ======================
+const video = document.createElement('video');
+video.src = './videos/output.mp4';
+video.loop = true;
+video.muted = true; // required for autoplay in most browsers
+video.playsInline = true;
+video.crossOrigin = 'anonymous';
+
+video.play();
+
+const videoTexture = new THREE.VideoTexture(video);
+videoTexture.colorSpace = THREE.SRGBColorSpace;
+
+const geometry = new THREE.PlaneGeometry(16, 9); // aspect-ratio sized plane
+const material = new THREE.MeshBasicMaterial({ map: videoTexture });
+
+const videoScreen = new THREE.Mesh(geometry, material);
+videoScreen.position.set(-1.5, 5.7, -0.05);
+videoScreen.rotation.set(0,0,0);
+scene.add(videoScreen);
+
+
+
+video.addEventListener('loadedmetadata', () => {
+  const aspect = video.videoWidth / video.videoHeight;
+  const height = 1.5; 
+  videoScreen.geometry.dispose();
+  videoScreen.geometry = new THREE.PlaneGeometry(height * aspect, height);
+});
+
+
+
+const video2 = document.createElement('video');
+video2.src = './videos/output2.mp4';
+video2.loop = true;
+video2.muted = true; // required for autoplay in most browsers
+video2.playsInline = true;
+video2.crossOrigin = 'anonymous';
+
+video2.play();
+
+const videoTexture2 = new THREE.VideoTexture(video2);
+videoTexture2.colorSpace = THREE.SRGBColorSpace;
+
+const geometry2 = new THREE.PlaneGeometry(16, 9); // aspect-ratio sized plane
+const material2 = new THREE.MeshBasicMaterial({ map: videoTexture2 });
+
+const videoScreen2 = new THREE.Mesh(geometry2, material2);
+videoScreen2.position.set(-5, 5.7, -5);
+videoScreen2.rotation.set(0, THREE.MathUtils.degToRad(-90), 0);
+scene.add(videoScreen2);
+
+
+
+video2.addEventListener('loadedmetadata', () => {
+  const aspect2 = video2.videoWidth / video2.videoHeight;
+  const height2 = 0.5; 
+  videoScreen2.geometry.dispose();
+  videoScreen2.geometry = new THREE.PlaneGeometry(height2 * aspect2, height2);
+});
+
+
 // ================== OBJECTS ==================
 let diskModel = null;
 let thurster = null;
