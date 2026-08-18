@@ -6,8 +6,10 @@ const CONFIG = {
   path: './3d_model/SpaceExtra2.glb',
   scale: 0.5,
   materialOptions: {
-    baseColor: 0x1E1E21,
-    shadowColor: 0x111112,
+    baseColor: 0x062104
+,
+    shadowColor: 0x062104
+,
     // rim pushed out of reach — the black outline mesh below handles the
     // edge look instead, so we don't want fresnel double-outlining on top of it
     rimColor: 0xE5E7FF,
